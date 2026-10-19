@@ -125,8 +125,9 @@ int execute_pipeline(const Pipeline *pipeline,
         return 0;
     }
 
-    if (pipeline->background) {
-        fprintf(stderr, "msh: background execution is not supported yet\n");
+    if (pipeline->background && !terminal_is_interactive()) {
+        fprintf(stderr, "msh: background execution requires "
+                        "an interactive terminal\n");
         return 2;
     }
 
@@ -146,7 +147,8 @@ int execute_pipeline(const Pipeline *pipeline,
 
         if (is_builtin(command)
             && strcmp(command->argv[0], "pwd") != 0) {
-            fprintf(stderr, "msh: %s is not supported in a pipeline\n",
+            fprintf(stderr, "msh: %s is not supported in a pipeline "
+                            "or background job\n",
                     command->argv[0]);
             return 2;
         }
@@ -230,7 +232,8 @@ int execute_pipeline(const Pipeline *pipeline,
     close_pipes(pipes, pipe_count);
     close(gate[0]);
 
-    if (!failed && terminal_give_to(job->pgid) == -1) {
+    if (!failed && !pipeline->background
+        && terminal_give_to(job->pgid) == -1) {
         failed = 1;
     }
 
@@ -255,6 +258,12 @@ int execute_pipeline(const Pipeline *pipeline,
         terminal_reclaim();
         jobs_remove(job);
         return 1;
+    }
+
+    if (pipeline->background) {
+        job->background = 1;
+        printf("[%d] %ld\n", job->id, (long)job->pgid);
+        return 0;
     }
 
     int status;
