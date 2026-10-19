@@ -133,6 +133,11 @@ int parse_pipeline(const TokenList *tokens, Pipeline *result,
 
         switch (token->type) {
         case TOKEN_WORD:
+            if (command->argc >= MSH_MAX_ARGS) {
+                message = "too many arguments (maximum 128)";
+                goto fail;
+            }
+
             if (add_argument(command, token->text) == -1) {
                 message = "out of memory";
                 goto fail;

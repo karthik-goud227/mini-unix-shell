@@ -5,6 +5,8 @@
 
 #include <stddef.h>
 
+#define MSH_MAX_ARGS 128
+
 typedef enum {
     REDIRECT_IN,
     REDIRECT_OUT,

@@ -33,10 +33,11 @@ parser_test: parser_test.c parser.o lexer.o parser.h lexer.h
 jobs_test: jobs_test.c jobs.o jobs.h
 	$(CC) $(CFLAGS) jobs_test.c jobs.o -o jobs_test
 
-test: lexer_test parser_test jobs_test
+test: msh lexer_test parser_test jobs_test
 	./lexer_test
 	./parser_test
 	./jobs_test
+	python3 tests/integration_test.py
 
 clean:
 	rm -f msh $(OBJ) lexer_test parser_test jobs_test

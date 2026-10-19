@@ -80,6 +80,12 @@ int lex_line(const char *line, TokenList *result,
             while (line[i] != '\0'
                    && !is_space(line[i])
                    && !is_operator(line[i])) {
+                if (line[i] == ';' || line[i] == '('
+                    || line[i] == ')' || line[i] == '`') {
+                    message = "unsupported unquoted shell syntax";
+                    goto fail;
+                }
+
                 if (line[i] == '\\') {
                     i++;
                     if (line[i] == '\0') {
