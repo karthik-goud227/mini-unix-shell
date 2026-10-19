@@ -1,50 +1,12 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "executor.h"
 #include "lexer.h"
 #include "parser.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-static const char *redirect_name(RedirectType type)
-{
-    switch (type) {
-    case REDIRECT_IN:     return "<";
-    case REDIRECT_OUT:    return ">";
-    case REDIRECT_APPEND: return ">>";
-    }
-
-    return "?";
-}
-
-static void print_pipeline(const Pipeline *pipeline)
-{
-    if (pipeline->command_count == 0) {
-        return;
-    }
-
-    printf("Pipeline: %zu command(s), background=%s\n",
-           pipeline->command_count,
-           pipeline->background ? "yes" : "no");
-
-    for (size_t i = 0; i < pipeline->command_count; i++) {
-        const Command *command = &pipeline->commands[i];
-
-        printf("  Command %zu:\n", i + 1);
-
-        for (size_t j = 0; j < command->argc; j++) {
-            printf("    argv[%zu] = [%s]\n", j, command->argv[j]);
-        }
-
-        for (size_t j = 0; j < command->redirection_count; j++) {
-            const Redirection *redirect = &command->redirections[j];
-
-            printf("    redirect %s [%s]\n",
-                   redirect_name(redirect->type), redirect->path);
-        }
-    }
-}
 
 int main(void)
 {
@@ -95,10 +57,8 @@ int main(void)
             continue;
         }
 
-        print_pipeline(&pipeline);
-
         if (pipeline.command_count > 0) {
-            status = EXIT_SUCCESS;
+            status = execute_pipeline(&pipeline);
         }
 
         free_pipeline(&pipeline);
