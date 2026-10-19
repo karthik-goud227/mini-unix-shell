@@ -8,6 +8,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -162,6 +163,31 @@ static Job *requested_job(const Command *command)
     return job;
 }
 
+
+static int builtin_bg(const Command *command)
+{
+    Job *job = requested_job(command);
+
+    if (job == NULL) {
+        return 2;
+    }
+
+    if (kill(-job->pgid, SIGCONT) == -1) {
+        perror("msh: bg");
+        return 1;
+    }
+
+    jobs_mark_running(job);
+    job->background = 1;
+
+    if (printf("[%d] Running  %s\n",
+               job->id, job->command_text) < 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
 static int builtin_fg(const Command *command)
 {
     Job *job = requested_job(command);
@@ -200,7 +226,10 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 
     const char *name = command->argv[0];
 
-    if (strcmp(name, "fg") == 0) {
+    if (strcmp(name, "bg") == 0) {
+        result.handled = 1;
+        result.status = builtin_bg(command);
+    } else if (strcmp(name, "fg") == 0) {
         result.handled = 1;
         result.status = builtin_fg(command);
     } else if (strcmp(name, "jobs") == 0) {
@@ -254,7 +283,8 @@ int is_builtin(const Command *command)
         || strcmp(name, "pwd") == 0
         || strcmp(name, "exit") == 0
         || strcmp(name, "jobs") == 0
-        || strcmp(name, "fg") == 0;
+        || strcmp(name, "fg") == 0
+        || strcmp(name, "bg") == 0;
 }
 
 BuiltinResult run_builtin_redirected(const Command *command,
@@ -265,8 +295,10 @@ BuiltinResult run_builtin_redirected(const Command *command,
     }
 
     if (command->redirection_count > 0
-        && strcmp(command->argv[0], "fg") == 0) {
-        fprintf(stderr, "msh: fg: redirection is not supported\n");
+        && (strcmp(command->argv[0], "fg") == 0
+            || strcmp(command->argv[0], "bg") == 0)) {
+        fprintf(stderr, "msh: %s: redirection is not supported\n",
+                command->argv[0]);
         return (BuiltinResult) {.handled = 1, .status = 2};
     }
 
