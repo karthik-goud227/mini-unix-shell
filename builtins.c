@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "builtins.h"
+#include "jobs.h"
+#include "terminal.h"
 #include "redirection.h"
 
 #include <errno.h>
@@ -123,7 +125,19 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 
     const char *name = command->argv[0];
 
-    if (strcmp(name, "cd") == 0) {
+    if (strcmp(name, "jobs") == 0) {
+        result.handled = 1;
+
+        if (!terminal_is_interactive()) {
+            fprintf(stderr, "msh: jobs: requires an interactive terminal\n");
+            result.status = 2;
+        } else if (command->argc != 1) {
+            fprintf(stderr, "msh: jobs: arguments are not supported\n");
+            result.status = 2;
+        } else {
+            result.status = jobs_print();
+        }
+    } else if (strcmp(name, "cd") == 0) {
         result.handled = 1;
         result.status = builtin_cd(command);
     } else if (strcmp(name, "pwd") == 0) {
@@ -160,7 +174,8 @@ int is_builtin(const Command *command)
 
     return strcmp(name, "cd") == 0
         || strcmp(name, "pwd") == 0
-        || strcmp(name, "exit") == 0;
+        || strcmp(name, "exit") == 0
+        || strcmp(name, "jobs") == 0;
 }
 
 BuiltinResult run_builtin_redirected(const Command *command,

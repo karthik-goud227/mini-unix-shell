@@ -58,6 +58,8 @@ void jobs_reap_pending(void);
 
 int jobs_have_active(void);
 
+int jobs_print(void);
+
 /* Terminate remaining jobs, reap children and release the table. */
 void jobs_shutdown(void);
 

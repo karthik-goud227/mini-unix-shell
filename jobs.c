@@ -261,3 +261,38 @@ void jobs_shutdown(void)
         jobs_remove(job);
     }
 }
+
+
+int jobs_print(void)
+{
+    jobs_reap_pending();
+    int failed = 0;
+
+    for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
+        Job *job = job_table[i];
+
+        if (job == NULL) {
+            continue;
+        }
+
+        JobState state = jobs_get_state(job);
+        const char *label = "Running";
+
+        if (state == JOB_STOPPED) {
+            label = "Stopped";
+        } else if (state == JOB_DONE) {
+            label = "Done";
+        }
+
+        if (printf("[%d] %-7s %s\n",
+                   job->id, label, job->command_text) < 0) {
+            failed = 1;
+        }
+
+        if (state == JOB_DONE) {
+            jobs_remove(job);
+        }
+    }
+
+    return failed ? 1 : 0;
+}
