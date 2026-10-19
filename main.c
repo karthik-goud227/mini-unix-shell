@@ -1,23 +1,49 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "lexer.h"
+#include "parser.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-static const char *token_name(TokenType type)
+static const char *redirect_name(RedirectType type)
 {
     switch (type) {
-    case TOKEN_WORD:   return "WORD";
-    case TOKEN_PIPE:   return "PIPE";
-    case TOKEN_IN:     return "IN";
-    case TOKEN_OUT:    return "OUT";
-    case TOKEN_APPEND: return "APPEND";
-    case TOKEN_AMP:    return "AMP";
+    case REDIRECT_IN:     return "<";
+    case REDIRECT_OUT:    return ">";
+    case REDIRECT_APPEND: return ">>";
     }
 
-    return "UNKNOWN";
+    return "?";
+}
+
+static void print_pipeline(const Pipeline *pipeline)
+{
+    if (pipeline->command_count == 0) {
+        return;
+    }
+
+    printf("Pipeline: %zu command(s), background=%s\n",
+           pipeline->command_count,
+           pipeline->background ? "yes" : "no");
+
+    for (size_t i = 0; i < pipeline->command_count; i++) {
+        const Command *command = &pipeline->commands[i];
+
+        printf("  Command %zu:\n", i + 1);
+
+        for (size_t j = 0; j < command->argc; j++) {
+            printf("    argv[%zu] = [%s]\n", j, command->argv[j]);
+        }
+
+        for (size_t j = 0; j < command->redirection_count; j++) {
+            const Redirection *redirect = &command->redirections[j];
+
+            printf("    redirect %s [%s]\n",
+                   redirect_name(redirect->type), redirect->path);
+        }
+    }
 }
 
 int main(void)
@@ -50,6 +76,7 @@ int main(void)
         }
 
         TokenList tokens;
+        Pipeline pipeline;
         char error[128];
 
         if (lex_line(line, &tokens, error, sizeof(error)) == -1) {
@@ -58,18 +85,23 @@ int main(void)
             continue;
         }
 
-        for (size_t i = 0; i < tokens.count; i++) {
-            printf("%s [%s] @%zu\n",
-                   token_name(tokens.items[i].type),
-                   tokens.items[i].text,
-                   tokens.items[i].position);
+        int parsed = parse_pipeline(&tokens, &pipeline,
+                                    error, sizeof(error));
+        free_tokens(&tokens);
+
+        if (parsed == -1) {
+            fprintf(stderr, "msh: %s\n", error);
+            status = 2;
+            continue;
         }
 
-        if (tokens.count > 0) {
+        print_pipeline(&pipeline);
+
+        if (pipeline.command_count > 0) {
             status = EXIT_SUCCESS;
         }
 
-        free_tokens(&tokens);
+        free_pipeline(&pipeline);
     }
 
     free(line);
