@@ -14,7 +14,7 @@ lexer.o: lexer.c lexer.h
 parser.o: parser.c parser.h lexer.h
 executor.o: executor.c executor.h parser.h lexer.h redirection.h
 redirection.o: redirection.c redirection.h parser.h lexer.h
-builtins.o: builtins.c builtins.h parser.h lexer.h
+builtins.o: builtins.c builtins.h parser.h lexer.h redirection.h
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

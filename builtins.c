@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "builtins.h"
+#include "redirection.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -143,6 +144,94 @@ BuiltinResult run_builtin(const Command *command, int last_status)
         } else {
             result.should_exit = 1;
         }
+    }
+
+    return result;
+}
+
+
+int is_builtin(const Command *command)
+{
+    if (command->argc == 0) {
+        return 0;
+    }
+
+    const char *name = command->argv[0];
+
+    return strcmp(name, "cd") == 0
+        || strcmp(name, "pwd") == 0
+        || strcmp(name, "exit") == 0;
+}
+
+BuiltinResult run_builtin_redirected(const Command *command,
+                                     int last_status)
+{
+    if (!is_builtin(command)) {
+        return (BuiltinResult) {0};
+    }
+
+    if (command->redirection_count == 0) {
+        return run_builtin(command, last_status);
+    }
+
+    BuiltinResult result = {
+        .handled = 1,
+        .status = 1,
+        .should_exit = 0
+    };
+
+    fflush(NULL);
+
+    int saved_in = dup(STDIN_FILENO);
+
+    if (saved_in == -1) {
+        perror("msh: save stdin");
+        return result;
+    }
+
+    int saved_out = dup(STDOUT_FILENO);
+
+    if (saved_out == -1) {
+        perror("msh: save stdout");
+        close(saved_in);
+        return result;
+    }
+
+    if (apply_redirections(command) == 0) {
+        result = run_builtin(command, last_status);
+    }
+
+    /*
+     * Built-in output must reach its redirected destination
+     * before we restore stdout.
+     */
+    if (fflush(stdout) == EOF) {
+        perror("msh: flush stdout");
+        result.status = 1;
+    }
+
+    int restore_failed = 0;
+
+    if (dup2(saved_in, STDIN_FILENO) == -1) {
+        perror("msh: restore stdin");
+        restore_failed = 1;
+    }
+
+    if (dup2(saved_out, STDOUT_FILENO) == -1) {
+        perror("msh: restore stdout");
+        restore_failed = 1;
+    }
+
+    close(saved_in);
+    close(saved_out);
+
+    clearerr(stdin);
+    clearerr(stdout);
+
+    if (restore_failed) {
+        /* Continuing with broken standard descriptors is unsafe. */
+        result.status = 1;
+        result.should_exit = 1;
     }
 
     return result;

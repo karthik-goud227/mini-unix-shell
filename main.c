@@ -66,10 +66,9 @@ int main(void)
         int should_exit = 0;
 
         if (pipeline.command_count == 1
-            && !pipeline.background
-            && pipeline.commands[0].redirection_count == 0) {
+            && !pipeline.background) {
             BuiltinResult result =
-                run_builtin(&pipeline.commands[0], status);
+                run_builtin_redirected(&pipeline.commands[0], status);
 
             if (result.handled) {
                 status = result.status;
