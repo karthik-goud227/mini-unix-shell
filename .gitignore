@@ -2,3 +2,5 @@
 *.o
 
 /lexer_test
+
+/parser_test
