@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "builtins.h"
 #include "executor.h"
 #include "lexer.h"
 #include "parser.h"
@@ -57,11 +58,34 @@ int main(void)
             continue;
         }
 
-        if (pipeline.command_count > 0) {
+        if (pipeline.command_count == 0) {
+            free_pipeline(&pipeline);
+            continue;
+        }
+
+        int should_exit = 0;
+
+        if (pipeline.command_count == 1
+            && !pipeline.background
+            && pipeline.commands[0].redirection_count == 0) {
+            BuiltinResult result =
+                run_builtin(&pipeline.commands[0], status);
+
+            if (result.handled) {
+                status = result.status;
+                should_exit = result.should_exit;
+            } else {
+                status = execute_pipeline(&pipeline);
+            }
+        } else {
             status = execute_pipeline(&pipeline);
         }
 
         free_pipeline(&pipeline);
+
+        if (should_exit) {
+            break;
+        }
     }
 
     free(line);
