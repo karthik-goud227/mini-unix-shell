@@ -2,10 +2,12 @@
 
 #include "builtins.h"
 #include "jobs.h"
+#include "job_control.h"
 #include "terminal.h"
 #include "redirection.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -115,6 +117,79 @@ static int parse_exit_status(const char *text, int *status)
     return 0;
 }
 
+
+static Job *requested_job(const Command *command)
+{
+    const char *name = command->argv[0];
+
+    if (!terminal_is_interactive()) {
+        fprintf(stderr, "msh: %s: requires an interactive terminal\n", name);
+        return NULL;
+    }
+
+    if (command->argc != 2
+        || command->argv[1][0] != '%'
+        || command->argv[1][1] < '0'
+        || command->argv[1][1] > '9') {
+        fprintf(stderr, "msh: %s: usage: %s %%N\n", name, name);
+        return NULL;
+    }
+
+    char *end;
+    errno = 0;
+    long id = strtol(command->argv[1] + 1, &end, 10);
+
+    if (errno == ERANGE || *end != '\0' || id <= 0 || id > INT_MAX) {
+        fprintf(stderr, "msh: %s: invalid job ID\n", name);
+        return NULL;
+    }
+
+    jobs_reap_pending();
+    Job *job = jobs_find((int)id);
+
+    if (job == NULL) {
+        fprintf(stderr, "msh: %s: no such job: %s\n",
+                name, command->argv[1]);
+        return NULL;
+    }
+
+    if (jobs_get_state(job) == JOB_DONE) {
+        fprintf(stderr, "msh: %s: job has already finished\n", name);
+        jobs_remove(job);
+        return NULL;
+    }
+
+    return job;
+}
+
+static int builtin_fg(const Command *command)
+{
+    Job *job = requested_job(command);
+
+    if (job == NULL) {
+        return 2;
+    }
+
+    int resume = jobs_get_state(job) == JOB_STOPPED;
+    int status;
+
+    if (job_foreground(job, resume, &status) == -1) {
+        job->background = 1;
+        return 1;
+    }
+
+    if (jobs_get_state(job) == JOB_DONE) {
+        jobs_remove(job);
+    } else {
+        job->background = 1;
+        fprintf(stderr, "[%d] Stopped  %s\n",
+                job->id, job->command_text);
+        job->notified = 1;
+    }
+
+    return status;
+}
+
 BuiltinResult run_builtin(const Command *command, int last_status)
 {
     BuiltinResult result = {0};
@@ -125,7 +200,10 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 
     const char *name = command->argv[0];
 
-    if (strcmp(name, "jobs") == 0) {
+    if (strcmp(name, "fg") == 0) {
+        result.handled = 1;
+        result.status = builtin_fg(command);
+    } else if (strcmp(name, "jobs") == 0) {
         result.handled = 1;
 
         if (!terminal_is_interactive()) {
@@ -175,7 +253,8 @@ int is_builtin(const Command *command)
     return strcmp(name, "cd") == 0
         || strcmp(name, "pwd") == 0
         || strcmp(name, "exit") == 0
-        || strcmp(name, "jobs") == 0;
+        || strcmp(name, "jobs") == 0
+        || strcmp(name, "fg") == 0;
 }
 
 BuiltinResult run_builtin_redirected(const Command *command,
@@ -183,6 +262,12 @@ BuiltinResult run_builtin_redirected(const Command *command,
 {
     if (!is_builtin(command)) {
         return (BuiltinResult) {0};
+    }
+
+    if (command->redirection_count > 0
+        && strcmp(command->argv[0], "fg") == 0) {
+        fprintf(stderr, "msh: fg: redirection is not supported\n");
+        return (BuiltinResult) {.handled = 1, .status = 2};
     }
 
     if (command->redirection_count == 0) {
