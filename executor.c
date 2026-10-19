@@ -6,6 +6,7 @@
 #include "jobs.h"
 #include "redirection.h"
 #include "terminal.h"
+#include "signals.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -48,6 +49,7 @@ static void run_child(const Pipeline *pipeline, size_t index,
                       const sigset_t *original_mask)
 {
     close(gate[1]);
+    signals_close();
 
     if (terminal_is_interactive()) {
         if (setpgid(0, pgid == 0 ? getpid() : pgid) == -1) {

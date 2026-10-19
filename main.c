@@ -2,9 +2,11 @@
 
 #include "builtins.h"
 #include "executor.h"
+#include "input.h"
 #include "jobs.h"
 #include "lexer.h"
 #include "parser.h"
+#include "signals.h"
 #include "terminal.h"
 
 #include <stdio.h>
@@ -16,6 +18,11 @@ int main(void)
         return EXIT_FAILURE;
     }
 
+    if (signals_init() == -1) {
+        terminal_reclaim();
+        return EXIT_FAILURE;
+    }
+
     char *line = NULL;
     size_t capacity = 0;
     int interactive = terminal_is_interactive();
@@ -23,28 +30,32 @@ int main(void)
     int exit_warned = 0;
 
     for (;;) {
-        jobs_reap_pending();
+        jobs_notify();
 
         if (interactive) {
             fputs("msh> ", stdout);
             fflush(stdout);
         }
 
-        ssize_t length = getline(&line, &capacity, stdin);
+        int input_result = input_read_line(&line, &capacity);
 
-        if (length == -1) {
-            if (ferror(stdin)) {
-                perror("msh: input");
-                status = EXIT_FAILURE;
-                break;
-            }
+        if (input_result == -2) {
+            status = 2;
+            exit_warned = 0;
+            continue;
+        }
 
+        if (input_result == -1) {
+            status = EXIT_FAILURE;
+            break;
+        }
+
+        if (input_result == 0) {
             if (interactive && jobs_have_active() && !exit_warned) {
                 fprintf(stderr,
                         "\nmsh: active jobs remain; "
                         "repeat exit or Ctrl+D to terminate them\n");
                 exit_warned = 1;
-                clearerr(stdin);
                 continue;
             }
 
@@ -52,10 +63,6 @@ int main(void)
                 putchar('\n');
             }
             break;
-        }
-
-        if (length > 0 && line[length - 1] == '\n') {
-            line[--length] = '\0';
         }
 
         TokenList tokens;
@@ -119,6 +126,7 @@ int main(void)
     }
 
     jobs_shutdown();
+    signals_close();
 
     if (terminal_reclaim() == -1) {
         status = EXIT_FAILURE;

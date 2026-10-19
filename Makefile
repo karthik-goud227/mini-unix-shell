@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -g -O0
-OBJ = main.o lexer.o parser.o executor.o builtins.o redirection.o terminal.o jobs.o job_control.o
+OBJ = main.o lexer.o parser.o executor.o builtins.o redirection.o terminal.o jobs.o job_control.o signals.o input.o
 
 .PHONY: all clean test
 
@@ -9,13 +9,15 @@ all: msh
 msh: $(OBJ)
 	$(CC) $(CFLAGS) $(OBJ) -o msh
 
-main.o: main.c builtins.h executor.h jobs.h lexer.h parser.h terminal.h
+main.o: main.c builtins.h executor.h jobs.h lexer.h parser.h terminal.h signals.h input.h
 lexer.o: lexer.c lexer.h
 parser.o: parser.c parser.h lexer.h
-executor.o: executor.c executor.h builtins.h job_control.h jobs.h redirection.h terminal.h parser.h lexer.h
+executor.o: executor.c executor.h builtins.h job_control.h jobs.h redirection.h terminal.h parser.h lexer.h signals.h
 builtins.o: builtins.c builtins.h redirection.h parser.h lexer.h jobs.h terminal.h job_control.h
 redirection.o: redirection.c redirection.h parser.h lexer.h
 terminal.o: terminal.c terminal.h
+signals.o: signals.c signals.h
+input.o: input.c input.h jobs.h signals.h
 jobs.o: jobs.c jobs.h
 job_control.o: job_control.c job_control.h jobs.h terminal.h
 

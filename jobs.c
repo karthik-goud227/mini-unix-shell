@@ -296,3 +296,29 @@ int jobs_print(void)
 
     return failed ? 1 : 0;
 }
+
+
+void jobs_notify(void)
+{
+    jobs_reap_pending();
+
+    for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
+        Job *job = job_table[i];
+
+        if (job == NULL) {
+            continue;
+        }
+
+        JobState state = jobs_get_state(job);
+
+        if (state == JOB_DONE) {
+            fprintf(stderr, "[%d] Done     %s\n",
+                    job->id, job->command_text);
+            jobs_remove(job);
+        } else if (state == JOB_STOPPED && !job->notified) {
+            fprintf(stderr, "[%d] Stopped  %s\n",
+                    job->id, job->command_text);
+            job->notified = 1;
+        }
+    }
+}

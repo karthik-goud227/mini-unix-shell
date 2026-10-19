@@ -56,6 +56,8 @@ void jobs_mark_running(Job *job);
 /* Collect available child statuses without blocking. */
 void jobs_reap_pending(void);
 
+void jobs_notify(void);
+
 int jobs_have_active(void);
 
 int jobs_print(void);
