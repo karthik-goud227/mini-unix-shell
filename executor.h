@@ -3,7 +3,7 @@
 
 #include "parser.h"
 
-/* Executes a parsed pipeline and returns a shell-style status. */
-int execute_pipeline(const Pipeline *pipeline);
+int execute_pipeline(const Pipeline *pipeline,
+                     const char *command_text);
 
 #endif

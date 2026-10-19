@@ -52,4 +52,13 @@ JobState jobs_get_state(const Job *job);
 /* Marks unfinished processes running after a successful SIGCONT. */
 void jobs_mark_running(Job *job);
 
+
+/* Collect available child statuses without blocking. */
+void jobs_reap_pending(void);
+
+int jobs_have_active(void);
+
+/* Terminate remaining jobs, reap children and release the table. */
+void jobs_shutdown(void);
+
 #endif

@@ -2,18 +2,19 @@
 
 #include "executor.h"
 #include "builtins.h"
+#include "job_control.h"
+#include "jobs.h"
 #include "redirection.h"
+#include "terminal.h"
 
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
-static void close_pipes(int (*pipes)[2], size_t count)
+static void close_pipes(int pipes[][2], size_t count)
 {
     for (size_t i = 0; i < count; i++) {
         close(pipes[i][0]);
@@ -21,53 +22,87 @@ static void close_pipes(int (*pipes)[2], size_t count)
     }
 }
 
-static int wait_for_child(pid_t pid, int *status)
+static void terminate_job(Job *job)
 {
-    for (;;) {
-        if (waitpid(pid, status, 0) != -1) {
-            return 0;
+    /* Use individual PIDs even if group creation was incomplete. */
+    for (size_t i = 0; i < job->process_count; i++) {
+        if (!job->processes[i].completed) {
+            kill(job->processes[i].pid, SIGKILL);
+        }
+    }
+
+    for (size_t i = 0; i < job->process_count; i++) {
+        if (job->processes[i].completed) {
+            continue;
         }
 
-        if (errno != EINTR) {
-            return -1;
+        while (waitpid(job->processes[i].pid, NULL, 0) == -1
+               && errno == EINTR) {
         }
     }
 }
 
 static void run_child(const Pipeline *pipeline, size_t index,
-                      int (*pipes)[2], size_t pipe_count)
+                      int pipes[][2], size_t pipe_count,
+                      int gate[2], pid_t pgid,
+                      const sigset_t *original_mask)
 {
-    const Command *command = &pipeline->commands[index];
+    close(gate[1]);
 
-    if (index > 0) {
-        if (dup2(pipes[index - 1][0], STDIN_FILENO) == -1) {
-            perror("msh: pipe input");
+    if (terminal_is_interactive()) {
+        if (setpgid(0, pgid == 0 ? getpid() : pgid) == -1) {
+            perror("msh: child process group");
             _exit(1);
         }
     }
 
-    if (index + 1 < pipeline->command_count) {
-        if (dup2(pipes[index][1], STDOUT_FILENO) == -1) {
-            perror("msh: pipe output");
-            _exit(1);
-        }
+    if (terminal_prepare_child() == -1) {
+        perror("msh: child signals");
+        _exit(1);
+    }
+
+    if (sigprocmask(SIG_SETMASK, original_mask, NULL) == -1) {
+        perror("msh: child signal mask");
+        _exit(1);
+    }
+
+    /* EOF means the parent has finished grouping and handoff. */
+    char byte;
+    ssize_t received;
+
+    do {
+        received = read(gate[0], &byte, 1);
+    } while (received == -1 && errno == EINTR);
+
+    close(gate[0]);
+
+    if (received != 0) {
+        _exit(1);
+    }
+
+    if (index > 0
+        && dup2(pipes[index - 1][0], STDIN_FILENO) == -1) {
+        perror("msh: pipe input");
+        _exit(1);
+    }
+
+    if (index + 1 < pipeline->command_count
+        && dup2(pipes[index][1], STDOUT_FILENO) == -1) {
+        perror("msh: pipe output");
+        _exit(1);
     }
 
     close_pipes(pipes, pipe_count);
 
-    /* Explicit file redirections override pipe connections. */
+    const Command *command = &pipeline->commands[index];
+
     if (apply_redirections(command) == -1) {
         _exit(1);
     }
 
     if (is_builtin(command)) {
         BuiltinResult result = run_builtin(command, 0);
-
-        if (fflush(stdout) == EOF) {
-            _exit(1);
-        }
-
-        _exit(result.status);
+        _exit(fflush(stdout) == EOF ? 1 : result.status);
     }
 
     execvp(command->argv[0], command->argv);
@@ -81,7 +116,8 @@ static void run_child(const Pipeline *pipeline, size_t index,
           ? 127 : 126);
 }
 
-int execute_pipeline(const Pipeline *pipeline)
+int execute_pipeline(const Pipeline *pipeline,
+                     const char *command_text)
 {
     size_t count = pipeline->command_count;
 
@@ -94,12 +130,12 @@ int execute_pipeline(const Pipeline *pipeline)
         return 2;
     }
 
-    if (count > 16) {
-        fprintf(stderr, "msh: maximum pipeline length is 16 commands\n");
+    if (count > MSH_MAX_PROCESSES) {
+        fprintf(stderr, "msh: maximum pipeline length is %d commands\n",
+                MSH_MAX_PROCESSES);
         return 2;
     }
 
-    /* Validate the whole pipeline before creating files or children. */
     for (size_t i = 0; i < count; i++) {
         const Command *command = &pipeline->commands[i];
 
@@ -110,100 +146,138 @@ int execute_pipeline(const Pipeline *pipeline)
 
         if (is_builtin(command)
             && strcmp(command->argv[0], "pwd") != 0) {
-            fprintf(stderr,
-                    "msh: %s is not supported in a pipeline\n",
+            fprintf(stderr, "msh: %s is not supported in a pipeline\n",
                     command->argv[0]);
             return 2;
         }
     }
 
-    size_t pipe_count = count - 1;
-    int (*pipes)[2] = NULL;
+    Job *job = jobs_create(command_text);
 
-    if (pipe_count > 0) {
-        pipes = malloc(pipe_count * sizeof(*pipes));
-
-        if (pipes == NULL) {
-            fprintf(stderr, "msh: out of memory\n");
-            return 1;
-        }
+    if (job == NULL) {
+        return 1;
     }
 
+    int pipes[MSH_MAX_PROCESSES - 1][2];
     size_t opened = 0;
+    size_t pipe_count = count - 1;
 
     for (; opened < pipe_count; opened++) {
         if (pipe(pipes[opened]) == -1) {
             perror("msh: pipe");
             close_pipes(pipes, opened);
-            free(pipes);
+            jobs_remove(job);
             return 1;
         }
     }
 
-    pid_t children[16];
-    size_t launched = 0;
+    int gate[2];
+
+    if (pipe(gate) == -1) {
+        perror("msh: launch gate");
+        close_pipes(pipes, pipe_count);
+        jobs_remove(job);
+        return 1;
+    }
+
+    sigset_t blocked;
+    sigset_t original_mask;
+
+    sigemptyset(&blocked);
+    sigaddset(&blocked, SIGCHLD);
+
+    if (sigprocmask(SIG_BLOCK, &blocked, &original_mask) == -1) {
+        perror("msh: block SIGCHLD");
+        close_pipes(pipes, pipe_count);
+        close(gate[0]);
+        close(gate[1]);
+        jobs_remove(job);
+        return 1;
+    }
 
     fflush(NULL);
+    int failed = 0;
 
     for (size_t i = 0; i < count; i++) {
         pid_t child = fork();
 
         if (child == -1) {
             perror("msh: fork");
-            close_pipes(pipes, pipe_count);
-            free(pipes);
-
-            for (size_t j = 0; j < launched; j++) {
-                kill(children[j], SIGKILL);
-            }
-
-            for (size_t j = 0; j < launched; j++) {
-                int ignored;
-                wait_for_child(children[j], &ignored);
-            }
-
-            return 1;
+            failed = 1;
+            break;
         }
 
         if (child == 0) {
-            run_child(pipeline, i, pipes, pipe_count);
+            run_child(pipeline, i, pipes, pipe_count,
+                      gate, job->pgid, &original_mask);
+            _exit(1);
         }
 
-        children[launched++] = child;
+        job->processes[job->process_count++].pid = child;
+
+        if (job->pgid == 0) {
+            job->pgid = child;
+        }
+
+        if (terminal_is_interactive()
+            && setpgid(child, job->pgid) == -1) {
+            perror("msh: parent process group");
+            failed = 1;
+            break;
+        }
     }
 
-    /* Parent must not retain pipe ends while waiting. */
     close_pipes(pipes, pipe_count);
-    free(pipes);
+    close(gate[0]);
 
-    int last_status = 0;
-    int wait_failed = 0;
-
-    for (size_t i = 0; i < launched; i++) {
-        int status;
-
-        if (wait_for_child(children[i], &status) == -1) {
-            perror("msh: waitpid");
-            wait_failed = 1;
-            continue;
-        }
-
-        if (i + 1 == launched) {
-            last_status = status;
-        }
+    if (!failed && terminal_give_to(job->pgid) == -1) {
+        failed = 1;
     }
 
-    if (wait_failed) {
+    if (failed) {
+        /* Keep the gate closed to children until they are killed. */
+        terminate_job(job);
+    }
+
+    close(gate[1]);
+
+    if (sigprocmask(SIG_SETMASK, &original_mask, NULL) == -1) {
+        perror("msh: restore signal mask");
+
+        if (!failed) {
+            terminate_job(job);
+        }
+
+        failed = 1;
+    }
+
+    if (failed) {
+        terminal_reclaim();
+        jobs_remove(job);
         return 1;
     }
 
-    if (WIFEXITED(last_status)) {
-        return WEXITSTATUS(last_status);
+    int status;
+
+    if (job_foreground(job, 0, &status) == -1) {
+        terminate_job(job);
+        terminal_reclaim();
+        jobs_remove(job);
+        return 1;
     }
 
-    if (WIFSIGNALED(last_status)) {
-        return 128 + WTERMSIG(last_status);
+    if (jobs_get_state(job) == JOB_DONE) {
+        jobs_remove(job);
+    } else if (!terminal_is_interactive()) {
+        fprintf(stderr, "msh: stopped jobs require an interactive terminal\n");
+        terminate_job(job);
+        jobs_remove(job);
+    } else {
+        job->background = 1;
+        fprintf(stderr, "[%d] Stopped  %s\n",
+                job->id, job->command_text);
+        job->notified = 1;
     }
 
-    return 1;
+    return status;
 }

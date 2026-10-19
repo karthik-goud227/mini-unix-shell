@@ -3,6 +3,10 @@
 #include "jobs.h"
 
 #include <limits.h>
+#include <errno.h>
+#include <signal.h>
+#include <time.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -149,4 +153,111 @@ void jobs_mark_running(Job *job)
     }
 
     job->notified = 0;
+}
+
+
+void jobs_reap_pending(void)
+{
+    for (;;) {
+        int status;
+        pid_t pid = waitpid(-1, &status,
+                            WNOHANG | WUNTRACED | WCONTINUED);
+
+        if (pid > 0) {
+            jobs_record_status(pid, status);
+        } else if (pid == -1 && errno == EINTR) {
+            continue;
+        } else {
+            break;
+        }
+    }
+}
+
+int jobs_have_active(void)
+{
+    jobs_reap_pending();
+
+    for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
+        if (job_table[i] != NULL
+            && jobs_get_state(job_table[i]) != JOB_DONE) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void signal_active_jobs(int signal_number)
+{
+    for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
+        Job *job = job_table[i];
+
+        if (job != NULL && job->pgid > 0
+            && jobs_get_state(job) != JOB_DONE) {
+            if (kill(-job->pgid, signal_number) == -1
+                && errno != ESRCH) {
+                perror("msh: signal job during shutdown");
+            }
+        }
+    }
+}
+
+static void shutdown_grace_period(void)
+{
+    /* At most about 200 ms, with status collection between waits. */
+    for (int i = 0; i < 20 && jobs_have_active(); i++) {
+        struct timespec remaining = {
+            .tv_sec = 0,
+            .tv_nsec = 10000000L
+        };
+
+        while (nanosleep(&remaining, &remaining) == -1
+               && errno == EINTR) {
+        }
+    }
+
+    jobs_reap_pending();
+}
+
+void jobs_shutdown(void)
+{
+    jobs_reap_pending();
+
+    signal_active_jobs(SIGHUP);
+    signal_active_jobs(SIGCONT);
+    shutdown_grace_period();
+
+    signal_active_jobs(SIGTERM);
+    shutdown_grace_period();
+
+    signal_active_jobs(SIGKILL);
+
+    for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
+        Job *job = job_table[i];
+
+        if (job == NULL) {
+            continue;
+        }
+
+        for (size_t j = 0; j < job->process_count; j++) {
+            Process *process = &job->processes[j];
+
+            if (process->completed) {
+                continue;
+            }
+
+            int status;
+            pid_t pid;
+
+            do {
+                pid = waitpid(process->pid, &status, 0);
+            } while (pid == -1 && errno == EINTR);
+
+            if (pid > 0) {
+                jobs_record_status(pid, status);
+            }
+        }
+
+        jobs_remove(job);
+    }
 }
