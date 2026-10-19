@@ -10,7 +10,8 @@
  *   1: a line is ready, without its trailing newline
  *   0: end of input
  *  -1: input/allocation error
- *  -2: line exceeded MSH_MAX_LINE and was discarded
+ *  -2: invalid or oversized line was discarded
+ *  -3: input was cancelled by Ctrl+C
  *
  * The caller owns the reusable buffer and must free it.
  */

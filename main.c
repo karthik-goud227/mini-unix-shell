@@ -39,6 +39,12 @@ int main(void)
 
         int input_result = input_read_line(&line, &capacity);
 
+        if (input_result == -3) {
+            status = 130;
+            exit_warned = 0;
+            continue;
+        }
+
         if (input_result == -2) {
             status = 2;
             exit_warned = 0;

@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "signals.h"
+#include "terminal.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -9,13 +10,16 @@
 #include <unistd.h>
 
 static int event_pipe[2] = {-1, -1};
+static volatile sig_atomic_t interrupt_pending;
 
 static void child_status_changed(int signal_number)
 {
     int saved_errno = errno;
     char byte = 'C';
 
-    (void)signal_number;
+    if (signal_number == SIGINT) {
+        interrupt_pending = 1;
+    }
 
     /*
      * The pipe is nonblocking. If full, it is already readable,
@@ -74,6 +78,13 @@ int signals_init(void)
         return -1;
     }
 
+    if (terminal_is_interactive()
+        && sigaction(SIGINT, &action, NULL) == -1) {
+        perror("msh: install SIGINT handler");
+        signals_close();
+        return -1;
+    }
+
     return 0;
 }
 
@@ -109,6 +120,10 @@ void signals_close(void)
     sigemptyset(&action.sa_mask);
     sigaction(SIGCHLD, &action, NULL);
 
+    if (terminal_is_interactive()) {
+        sigaction(SIGINT, &action, NULL);
+    }
+
     if (event_pipe[0] != -1) {
         close(event_pipe[0]);
         event_pipe[0] = -1;
@@ -118,4 +133,29 @@ void signals_close(void)
         close(event_pipe[1]);
         event_pipe[1] = -1;
     }
+}
+
+
+int signals_take_interrupt(void)
+{
+    sigset_t blocked;
+    sigset_t original;
+
+    sigemptyset(&blocked);
+    sigaddset(&blocked, SIGINT);
+
+    if (sigprocmask(SIG_BLOCK, &blocked, &original) == -1) {
+        perror("msh: block prompt interrupt");
+        return -1;
+    }
+
+    int pending = interrupt_pending;
+    interrupt_pending = 0;
+
+    if (sigprocmask(SIG_SETMASK, &original, NULL) == -1) {
+        perror("msh: restore prompt signal mask");
+        return -1;
+    }
+
+    return pending;
 }

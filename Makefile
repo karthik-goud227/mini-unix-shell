@@ -16,7 +16,7 @@ executor.o: executor.c executor.h builtins.h job_control.h jobs.h redirection.h 
 builtins.o: builtins.c builtins.h redirection.h parser.h lexer.h jobs.h terminal.h job_control.h
 redirection.o: redirection.c redirection.h parser.h lexer.h
 terminal.o: terminal.c terminal.h
-signals.o: signals.c signals.h
+signals.o: signals.c signals.h terminal.h
 input.o: input.c input.h jobs.h signals.h
 jobs.o: jobs.c jobs.h
 job_control.o: job_control.c job_control.h jobs.h terminal.h

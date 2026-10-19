@@ -28,6 +28,18 @@ int input_read_line(char **line, size_t *capacity)
     int too_long = 0;
 
     for (;;) {
+        int interrupted = signals_take_interrupt();
+
+        if (interrupted == -1) {
+            return -1;
+        }
+
+        if (interrupted) {
+            (*line)[0] = '\0';
+            putchar('\n');
+            return -3;
+        }
+
         struct pollfd descriptors[2] = {
             {
                 .fd = STDIN_FILENO,
@@ -53,6 +65,7 @@ int input_read_line(char **line, size_t *capacity)
         if (descriptors[1].revents & POLLIN) {
             signals_drain();
             jobs_reap_pending();
+            continue;
         }
 
         if ((descriptors[0].revents
