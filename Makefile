@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -g -O0
-OBJ = main.o lexer.o parser.o executor.o builtins.o
+OBJ = main.o lexer.o parser.o executor.o builtins.o redirection.o
 
 .PHONY: all clean test
 
@@ -12,7 +12,8 @@ msh: $(OBJ)
 main.o: main.c lexer.h parser.h executor.h builtins.h
 lexer.o: lexer.c lexer.h
 parser.o: parser.c parser.h lexer.h
-executor.o: executor.c executor.h parser.h lexer.h
+executor.o: executor.c executor.h parser.h lexer.h redirection.h
+redirection.o: redirection.c redirection.h parser.h lexer.h
 builtins.o: builtins.c builtins.h parser.h lexer.h
 
 %.o: %.c

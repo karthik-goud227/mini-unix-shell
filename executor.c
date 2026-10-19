@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "executor.h"
+#include "redirection.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -16,11 +17,10 @@ int execute_pipeline(const Pipeline *pipeline)
     }
 
     if (pipeline->command_count != 1
-        || pipeline->background
-        || pipeline->commands[0].redirection_count != 0) {
+        || pipeline->background) {
         fprintf(stderr,
                 "msh: execution currently supports only one "
-                "foreground command without redirection\n");
+                "foreground command\n");
         return 2;
     }
 
@@ -29,6 +29,15 @@ int execute_pipeline(const Pipeline *pipeline)
     if (command->argc == 0 || command->argv[0][0] == '\0') {
         fprintf(stderr, "msh: empty command name\n");
         return 127;
+    }
+
+    if (command->redirection_count > 0
+        && (strcmp(command->argv[0], "cd") == 0
+            || strcmp(command->argv[0], "pwd") == 0
+            || strcmp(command->argv[0], "exit") == 0)) {
+        fprintf(stderr,
+                "msh: built-in redirection is not supported yet\n");
+        return 2;
     }
 
     /*
@@ -45,6 +54,10 @@ int execute_pipeline(const Pipeline *pipeline)
     }
 
     if (child == 0) {
+        if (apply_redirections(command) == -1) {
+            _exit(1);
+        }
+
         execvp(command->argv[0], command->argv);
 
         /* execvp returns only when execution fails. */
