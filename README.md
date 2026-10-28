@@ -57,7 +57,9 @@ make clean
 
 - External programs with arguments and PATH lookup
 - Built-ins: cd, pwd, exit, jobs, fg and bg
-- Single and double quotes for literal argument grouping
+- Single and double quotes for argument grouping
+- Environment-variable expansion with $NAME
+- Previous command status expansion with $?
 - Empty quoted arguments and adjacent quoted/unquoted fragments
 - Backslash escaping
 - Input redirection: <
@@ -114,6 +116,47 @@ Redirection on fg and bg is deliberately rejected.
 Job-control built-ins and background execution require an interactive
 terminal. Non-interactive foreground commands and pipelines are supported.
 
+## Variable expansion
+
+Expansion runs after lexing and before parsing, using the original
+token spelling to preserve quote and escape boundaries.
+
+- `$NAME` reads an inherited environment variable.
+- `$?` expands to the previous command's status.
+- Double quotes allow expansion; single quotes prevent it.
+- A backslash before `$` prevents expansion outside quotes and inside
+  double quotes.
+- Variable names use letters, digits and underscores, and cannot
+  start with a digit.
+- Unset variables expand to an empty string.
+- Expansion applies to command words, arguments and redirection paths.
+
+Examples inside msh:
+
+```text
+echo "$HOME"
+echo '$HOME'
+echo \$HOME
+false
+echo $?
+```
+
+The first command prints the home directory. The next two print
+literal `$HOME`. After `false`, `echo $?` prints `1`.
+
+Each original word remains one argument, including empty values.
+There is no field splitting or wildcard expansion, even for unquoted
+variables. This intentionally differs from full POSIX shell behavior.
+
+Inserted values are not expanded again or interpreted as shell syntax.
+For example, a pipe character inside a variable does not create a pipeline.
+All `$?` references on one input line use the status from before that line.
+
+Only `$NAME` and `$?` are supported. Braced expansion such as `${HOME}`,
+positional parameters such as `$1`, and special parameters such as `$$`
+are not implemented. Shell assignments, export and unset built-ins are
+also not implemented.
+
 ## Signals and job lifecycle
 
 One pipeline is one job, with one process record per stage.
@@ -157,8 +200,10 @@ mean the background program has finished successfully.
 Oversized input is discarded rather than partly executed.
 NUL bytes are rejected.
 
-Release 1 does not implement:
-- Variable or tilde expansion
+The current implementation does not support:
+- Tilde expansion or advanced parameter expansion
+- Field splitting of expanded values
+- export and unset built-ins
 - Wildcard expansion
 - Command substitution
 - Semicolon command lists or logical operators && and ||
@@ -168,9 +213,8 @@ Release 1 does not implement:
 - Command history or autocomplete
 - A custom memory allocator
 
-Quotes group literal text; they do not enable expansion.
-Unquoted semicolons, parentheses and backticks are rejected.
-For example, `$HOME` is passed literally rather than expanded.
+Single quotes preserve literal text; double quotes allow variable
+expansion. Unquoted semicolons, parentheses and backticks are rejected.
 
 Foreground Ctrl+C may leave `^C` adjacent to the next prompt.
 This is a display limitation and does not affect process control.
@@ -181,7 +225,8 @@ This is a display limitation and does not affect process control.
 | --- | --- |
 | main.c | Initialization, dispatch, status and shutdown |
 | input.c | Bounded input and poll-based event waiting |
-| lexer.c | Words, operators, quoting and escapes |
+| lexer.c | Words, operators, quotes, escapes and original token spelling |
+| expansion.c | Quote-aware environment and previous-status expansion |
 | parser.c | Commands, ordered redirections and pipelines |
 | executor.c | Pipes, fork/exec, grouping and launch synchronization |
 | builtins.c | Parent built-ins and descriptor restoration |
@@ -198,10 +243,13 @@ make test
 ```
 
 This builds and runs lexer, parser and job-state test programs,
-followed by 24 whole-shell integration tests.
+plus 17 expansion unit tests and 35 whole-shell integration tests
+(24 general tests and 11 expansion tests).
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
+Expansion integration tests also cover quote handling, empty values,
+pipeline statuses, expanded filenames and built-in arguments.
 They use temporary directories and clean up their test files.
 
 Interactive job control additionally requires manual or PTY tests.
@@ -231,13 +279,17 @@ with only three standard descriptors open at shell exit, for:
 - Foreground execution, parsing failures and redirection failures
 - Background launch, stop/resume, interruption and shutdown cleanup
 
+The expansion unit tests were also checked under Valgrind:
+all 17 passed, all 154 allocations were freed, zero memory errors
+were reported, and only three standard descriptors remained open.
+
 These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
-Possible additions include history, variable expansion, autocomplete,
-logical operators and a project-specific memory allocator.
+Possible additions include history, export/unset built-ins,
+advanced parameter expansion, autocomplete, logical operators,
+job resource statistics and a project-specific memory allocator.
 
 Each extension should define its behavior, update the relevant module
 interfaces and preserve the existing regression tests.
-Variable expansion will require preserving additional quote metadata.

@@ -44,6 +44,7 @@ test: msh lexer_test parser_test jobs_test expansion_test
 	./jobs_test
 	./expansion_test
 	python3 tests/integration_test.py
+	python3 tests/expansion_integration_test.py
 
 clean:
 	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test
