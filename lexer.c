@@ -22,6 +22,7 @@ void free_tokens(TokenList *tokens)
 
     for (size_t i = 0; i < tokens->count; i++) {
         free(tokens->items[i].text);
+        free(tokens->items[i].raw_text);
     }
 
     free(tokens->items);
@@ -133,9 +134,20 @@ int lex_line(const char *line, TokenList *result,
             capacity = next;
         }
 
+        size_t raw_length = i - start;
+        char *raw_text = malloc(raw_length + 1);
+        if (raw_text == NULL) {
+            message = "out of memory";
+            goto fail;
+        }
+
+        memcpy(raw_text, line + start, raw_length);
+        raw_text[raw_length] = '\0';
+
         result->items[result->count++] = (Token) {
             .type = type,
             .text = word,
+            .raw_text = raw_text,
             .position = start
         };
 

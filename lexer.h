@@ -15,6 +15,7 @@ typedef enum {
 typedef struct {
     TokenType type;
     char *text;
+    char *raw_text; /* Original spelling, including quotes/escapes. */
     size_t position;
 } Token;
 
