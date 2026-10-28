@@ -78,6 +78,89 @@ static int builtin_stats(const Command *command)
     return 0;
 }
 
+static int valid_environment_name(const char *name, size_t length)
+{
+    if (length == 0) {
+        return 0;
+    }
+
+    for (size_t i = 0; i < length; i++) {
+        char c = name[i];
+        int letter = (c >= 'A' && c <= 'Z')
+                  || (c >= 'a' && c <= 'z');
+        int digit = c >= '0' && c <= '9';
+
+        if (!(letter || c == '_' || (i > 0 && digit))) {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+static int builtin_export(const Command *command)
+{
+    if (command->argc != 2) {
+        fprintf(stderr, "msh: export: usage: export NAME=value\n");
+        return 2;
+    }
+
+    const char *assignment = command->argv[1];
+    const char *equals = strchr(assignment, '=');
+
+    if (equals == NULL) {
+        fprintf(stderr, "msh: export: expected NAME=value\n");
+        return 2;
+    }
+
+    size_t length = (size_t)(equals - assignment);
+
+    if (!valid_environment_name(assignment, length)) {
+        fprintf(stderr, "msh: export: invalid variable name\n");
+        return 2;
+    }
+
+    char *name = strndup(assignment, length);
+    if (name == NULL) {
+        perror("msh: export");
+        return 1;
+    }
+
+    int result = setenv(name, equals + 1, 1);
+    int saved_errno = errno;
+    free(name);
+
+    if (result == -1) {
+        errno = saved_errno;
+        perror("msh: export");
+        return 1;
+    }
+
+    return 0;
+}
+
+static int builtin_unset(const Command *command)
+{
+    if (command->argc != 2) {
+        fprintf(stderr, "msh: unset: usage: unset NAME\n");
+        return 2;
+    }
+
+    const char *name = command->argv[1];
+
+    if (!valid_environment_name(name, strlen(name))) {
+        fprintf(stderr, "msh: unset: invalid variable name\n");
+        return 2;
+    }
+
+    if (unsetenv(name) == -1) {
+        perror("msh: unset");
+        return 1;
+    }
+
+    return 0;
+}
+
 static int builtin_cd(const Command *command)
 {
     if (command->argc > 2) {
@@ -290,7 +373,13 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 
     const char *name = command->argv[0];
 
-    if (strcmp(name, "stats") == 0) {
+    if (strcmp(name, "unset") == 0) {
+        result.handled = 1;
+        result.status = builtin_unset(command);
+    } else if (strcmp(name, "export") == 0) {
+        result.handled = 1;
+        result.status = builtin_export(command);
+    } else if (strcmp(name, "stats") == 0) {
         result.handled = 1;
         result.status = builtin_stats(command);
     } else if (strcmp(name, "bg") == 0) {
@@ -351,6 +440,8 @@ int is_builtin(const Command *command)
         || strcmp(name, "exit") == 0
         || strcmp(name, "jobs") == 0
         || strcmp(name, "stats") == 0
+        || strcmp(name, "export") == 0
+        || strcmp(name, "unset") == 0
         || strcmp(name, "fg") == 0
         || strcmp(name, "bg") == 0;
 }
