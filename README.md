@@ -56,9 +56,10 @@ make clean
 ## Supported features
 
 - External programs with arguments and PATH lookup
-- Built-ins: cd, pwd, exit, jobs, fg, bg and stats
+- Built-ins: cd, pwd, exit, jobs, fg, bg, stats, export and unset
 - Single and double quotes for argument grouping
 - Environment-variable expansion with $NAME
+- Environment-variable assignment and removal with export/unset
 - Previous command status expansion with $?
 - Empty quoted arguments and adjacent quoted/unquoted fragments
 - Backslash escaping
@@ -107,12 +108,14 @@ among the jobs currently listed.
   Invalid arguments report an error and keep the shell running.
 - `jobs`: lists tracked jobs; accepts no arguments.
 - `stats`: displays saved completed-job statistics; accepts no arguments.
+- `export NAME=value`: sets or replaces one environment variable.
+- `unset NAME`: removes one environment variable.
 - `fg %N`: places job N in the foreground and resumes it if stopped.
 - `bg %N`: resumes job N without giving it the terminal.
 
 All built-ins run in the parent for standalone foreground commands.
 Only pwd is permitted inside pipelines or background jobs.
-Redirection is supported for cd, pwd, exit, jobs and stats.
+Redirection is supported for cd, pwd, exit, jobs, stats, export and unset.
 Redirection on fg and bg is deliberately rejected.
 
 Job-control built-ins and background execution require an interactive
@@ -123,7 +126,8 @@ terminal. Non-interactive foreground commands and pipelines are supported.
 Expansion runs after lexing and before parsing, using the original
 token spelling to preserve quote and escape boundaries.
 
-- `$NAME` reads an inherited environment variable.
+- `$NAME` reads the shell's current environment, including inherited
+  variables and values set using export.
 - `$?` expands to the previous command's status.
 - Double quotes allow expansion; single quotes prevent it.
 - A backslash before `$` prevents expansion outside quotes and inside
@@ -156,8 +160,54 @@ All `$?` references on one input line use the status from before that line.
 
 Only `$NAME` and `$?` are supported. Braced expansion such as `${HOME}`,
 positional parameters such as `$1`, and special parameters such as `$$`
-are not implemented. Shell assignments, export and unset built-ins are
-also not implemented.
+are not implemented. Bare assignments such as NAME=value and
+per-command assignments such as NAME=value command are not supported;
+use export NAME=value instead.
+
+## Environment built-ins
+
+Supported forms:
+
+```text
+export MSH_DEMO=hello
+export MSH_DEMO="hello world"
+printenv MSH_DEMO
+unset MSH_DEMO
+```
+
+export sets or replaces exactly one variable in the shell's environment.
+Future child programs inherit it. unset removes exactly one variable;
+removing an absent variable succeeds.
+
+Names must match `[A-Za-z_][A-Za-z0-9_]*`. Values may be empty, contain
+spaces when quoted, or contain additional equals signs. The first equals
+sign separates the name from the value.
+
+An empty value is different from an absent variable: export NAME=
+keeps NAME present with an empty value, while unset NAME removes it.
+
+Expansion happens before the built-in runs. For example:
+
+```text
+export MSH_DEMO=hello
+export MSH_DEMO="$MSH_DEMO world"
+```
+
+The second assignment uses the previous value and stores "hello world".
+
+Both commands run in the parent shell and work interactively or through
+non-interactive input. They are rejected in pipelines and background jobs.
+Redirection is supported; if redirection setup fails, the environment
+change is not performed.
+
+Successful operations return 0, invalid names or usage return 2, and
+operational failures return 1. Changes affect this shell and future
+children, not its parent terminal shell or already-running children.
+The commands do not write persistent configuration.
+
+This version does not support multiple assignments/names in one command,
+export without an assignment, environment listing through export, options,
+or a separate set of unexported shell variables.
 
 ## Job resource statistics
 
@@ -255,13 +305,12 @@ NUL bytes are rejected.
 The current implementation does not support:
 - Tilde expansion or advanced parameter expansion
 - Field splitting of expanded values
-- export and unset built-ins
 - Wildcard expansion
 - Command substitution
 - Semicolon command lists or logical operators && and ||
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Shell assignments, loops, functions or a scripting language
+- Bare or per-command assignments, loops, functions or a scripting language
 - Command history or autocomplete
 - A custom memory allocator
 
@@ -301,8 +350,8 @@ This builds and runs lexer and parser tests, plus:
 - 9 resource-recorder checks.
 - 5 actual resource-collection checks.
 - 16 completed-job history checks.
-- 45 whole-shell integration tests: 24 general, 11 expansion and
-  10 statistics tests.
+- 62 whole-shell integration tests: 24 general, 11 expansion,
+  10 statistics and 17 environment tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -310,6 +359,8 @@ Expansion integration tests also cover quote handling, empty values,
 pipeline statuses, expanded filenames and built-in arguments.
 Statistics integration tests cover output, measurement coverage,
 ordering, redirection, argument validation and history limits.
+Environment integration tests cover assignment, replacement, child
+inheritance, empty values, removal, validation and redirection behavior.
 Integration tests use temporary directories and clean up their test files.
 
 Interactive job control additionally requires manual or PTY tests.
@@ -350,13 +401,17 @@ history, commands, a pipeline, stats output, redirection and invalid
 stats arguments freed all 140 allocations, reported zero memory
 errors, and left only three standard descriptors open.
 
+A full-shell environment check covering assignment, replacement,
+inheritance, empty values, removal, invalid names and redirection
+freed all 383 allocations, reported zero memory errors, and left
+only three standard descriptors open.
+
 These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
-Possible additions include history, export/unset built-ins,
-advanced parameter expansion, autocomplete, logical operators,
-and a project-specific memory allocator.
+Possible additions include history, advanced parameter expansion,
+autocomplete, logical operators and a project-specific memory allocator.
 
 Each extension should define its behavior, update the relevant module
 interfaces and preserve the existing regression tests.
