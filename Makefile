@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -g -O0
-OBJ = main.o expansion.o lexer.o parser.o executor.o builtins.o redirection.o terminal.o jobs.o job_control.o signals.o input.o
+OBJ = main.o history.o expansion.o lexer.o parser.o executor.o builtins.o redirection.o terminal.o jobs.o job_control.o signals.o input.o
 
 .PHONY: all clean test
 
@@ -10,7 +10,9 @@ msh: $(OBJ)
 	$(CC) $(CFLAGS) $(OBJ) -o msh
 
 main.o: main.c builtins.h executor.h jobs.h lexer.h parser.h terminal.h signals.h input.h
-main.o: expansion.h
+main.o: expansion.h history.h
+history.o: history.c history.h
+builtins.o: history.h
 expansion.o: expansion.c expansion.h lexer.h
 lexer.o: lexer.c lexer.h
 parser.o: parser.c parser.h lexer.h
@@ -59,6 +61,7 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	python3 tests/expansion_integration_test.py
 	python3 tests/statistics_integration_test.py
 	python3 tests/environment_integration_test.py
+	python3 tests/history_test.py
 
 clean:
 	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test

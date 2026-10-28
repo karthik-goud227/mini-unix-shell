@@ -4,6 +4,7 @@
 #include "executor.h"
 #include "expansion.h"
 #include "input.h"
+#include "history.h"
 #include "jobs.h"
 #include "lexer.h"
 #include "parser.h"
@@ -70,6 +71,10 @@ int main(void)
                 putchar('\n');
             }
             break;
+        }
+
+        if (interactive && history_add(line) == -1) {
+            perror("msh: history");
         }
 
         TokenList tokens;
@@ -142,6 +147,7 @@ int main(void)
     }
 
     jobs_shutdown();
+    history_clear();
     signals_close();
 
     if (terminal_reclaim() == -1) {

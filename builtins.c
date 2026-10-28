@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "builtins.h"
+#include "history.h"
 #include "jobs.h"
 #include "job_control.h"
 #include "terminal.h"
@@ -159,6 +160,26 @@ static int builtin_unset(const Command *command)
     }
 
     return 0;
+}
+
+static int builtin_history(const Command *command)
+{
+    if (command->argc == 1) {
+        if (history_print() == -1) {
+            perror("msh: history");
+            return 1;
+        }
+        return 0;
+    }
+
+    if (command->argc == 2
+        && strcmp(command->argv[1], "-c") == 0) {
+        history_clear();
+        return 0;
+    }
+
+    fprintf(stderr, "msh: history: usage: history [-c]\n");
+    return 2;
 }
 
 static int builtin_cd(const Command *command)
@@ -373,7 +394,10 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 
     const char *name = command->argv[0];
 
-    if (strcmp(name, "unset") == 0) {
+    if (strcmp(name, "history") == 0) {
+        result.handled = 1;
+        result.status = builtin_history(command);
+    } else if (strcmp(name, "unset") == 0) {
         result.handled = 1;
         result.status = builtin_unset(command);
     } else if (strcmp(name, "export") == 0) {
@@ -442,6 +466,7 @@ int is_builtin(const Command *command)
         || strcmp(name, "stats") == 0
         || strcmp(name, "export") == 0
         || strcmp(name, "unset") == 0
+        || strcmp(name, "history") == 0
         || strcmp(name, "fg") == 0
         || strcmp(name, "bg") == 0;
 }
