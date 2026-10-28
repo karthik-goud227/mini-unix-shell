@@ -62,6 +62,7 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	python3 tests/statistics_integration_test.py
 	python3 tests/environment_integration_test.py
 	python3 tests/history_test.py
+	python3 tests/history_integration_test.py
 
 clean:
 	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test

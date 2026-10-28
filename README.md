@@ -56,7 +56,7 @@ make clean
 ## Supported features
 
 - External programs with arguments and PATH lookup
-- Built-ins: cd, pwd, exit, jobs, fg, bg, stats, export and unset
+- Built-ins: cd, pwd, exit, jobs, fg, bg, stats, export, unset and history
 - Single and double quotes for argument grouping
 - Environment-variable expansion with $NAME
 - Environment-variable assignment and removal with export/unset
@@ -77,6 +77,7 @@ make clean
 - SIGCHLD-driven background reaping while idle
 - Confirmed shutdown with active-job cleanup
 - Per-job CPU and memory statistics with bounded session history
+- Interactive command history with numbering and clear support
 
 ## Examples
 
@@ -110,12 +111,15 @@ among the jobs currently listed.
 - `stats`: displays saved completed-job statistics; accepts no arguments.
 - `export NAME=value`: sets or replaces one environment variable.
 - `unset NAME`: removes one environment variable.
+- `history`: displays retained commands from oldest to newest.
+- `history -c`: clears command history and restarts numbering.
 - `fg %N`: places job N in the foreground and resumes it if stopped.
 - `bg %N`: resumes job N without giving it the terminal.
 
 All built-ins run in the parent for standalone foreground commands.
 Only pwd is permitted inside pipelines or background jobs.
-Redirection is supported for cd, pwd, exit, jobs, stats, export and unset.
+Redirection is supported for cd, pwd, exit, jobs, stats, export,
+unset and history.
 Redirection on fg and bg is deliberately rejected.
 
 Job-control built-ins and background execution require an interactive
@@ -209,6 +213,51 @@ This version does not support multiple assignments/names in one command,
 export without an assignment, environment listing through export, options,
 or a separate set of unexported shell variables.
 
+## Command history
+
+Interactive sessions retain the latest 100 nonblank submitted input lines.
+Entries are stored before lexing and expansion, preserving original
+quotes, escapes and variable references.
+
+Example inside a fresh msh session:
+
+```text
+echo first
+echo "$HOME"
+history
+history -c
+history
+```
+
+The first history command lists three entries, including itself.
+After clearing, the next history command appears as entry 1.
+
+- Blank or whitespace-only lines are skipped.
+- Input cancelled with Ctrl+C is not stored.
+- Lines rejected by the input reader, such as oversized lines, are not stored.
+- Submitted lines with syntax or execution errors are retained.
+- Repeated commands are retained as separate entries.
+- When full, history discards the oldest entry; numbering keeps increasing.
+- history -c clears all entries, including its own submitted line.
+- History is held in memory and freed at shutdown; it is not saved to disk.
+
+history supports output redirection, for example `history > commands.txt`.
+The redirected history command is included in the saved output.
+If redirection setup fails for history -c, existing history is not cleared,
+although that submitted line has already been recorded.
+
+The built-in is rejected in pipelines and background jobs. It accepts
+only no arguments or a single -c argument; invalid usage returns 2.
+Non-interactive input is not recorded, so history normally prints nothing
+in a non-interactive shell.
+
+If recording fails, the shell reports the error and still processes the
+command. History is separate from stats: it records submitted input,
+while stats stores completed-job resource summaries.
+
+This version does not implement history recall such as !! or !N,
+arrow-key navigation, search, or automatic persistence across sessions.
+
 ## Job resource statistics
 
 Run `stats` to display up to 16 saved completed-job summaries,
@@ -298,6 +347,7 @@ mean the background program has finished successfully.
 - Maximum pipeline stages: 16
 - Maximum simultaneously registered jobs: 64
 - Completed-job statistics history: latest 16 archived entries
+- Interactive command history: latest 100 nonblank input lines
 
 Oversized input is discarded rather than partly executed.
 NUL bytes are rejected.
@@ -311,7 +361,7 @@ The current implementation does not support:
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
 - Bare or per-command assignments, loops, functions or a scripting language
-- Command history or autocomplete
+- Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
 Single quotes preserve literal text; double quotes allow variable
@@ -326,6 +376,7 @@ This is a display limitation and does not affect process control.
 | --- | --- |
 | main.c | Initialization, dispatch, status and shutdown |
 | input.c | Bounded input and poll-based event waiting |
+| history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
 | expansion.c | Quote-aware environment and previous-status expansion |
 | parser.c | Commands, ordered redirections and pipelines |
@@ -349,7 +400,9 @@ This builds and runs lexer and parser tests, plus:
 - 17 expansion unit tests.
 - 9 resource-recorder checks.
 - 5 actual resource-collection checks.
-- 16 completed-job history checks.
+- 16 completed-job statistics history checks.
+- 12 command-history module checks.
+- 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 62 whole-shell integration tests: 24 general, 11 expansion,
   10 statistics and 17 environment tests.
 
@@ -363,7 +416,12 @@ Environment integration tests cover assignment, replacement, child
 inheritance, empty values, removal, validation and redirection behavior.
 Integration tests use temporary directories and clean up their test files.
 
-Interactive job control additionally requires manual or PTY tests.
+The history PTY tests check recording, clearing, original spelling,
+syntax-error retention, redirection, validation and the 100-entry limit.
+They use Python's standard library and require a usable PTY facility.
+
+Interactive job-control behaviors such as Ctrl+C and Ctrl+Z still
+require their separate manual or PTY checks.
 
 ## Manual job-control checks
 
@@ -375,7 +433,8 @@ Interactive job control additionally requires manual or PTY tests.
 - Stop a program that disables terminal echo; verify shell echo is
   restored and fg resumes with the program's saved terminal settings.
 - Confirm exit warnings and cleanup with a live job.
-- Cancel unfinished prompt input with Ctrl+C.
+- Cancel unfinished prompt input with Ctrl+C and verify that the
+  cancelled line does not appear in command history.
 - Verify stats after background completion and foreground interruption.
 - Verify stopped jobs stay out of completed statistics until termination.
 
@@ -406,12 +465,18 @@ inheritance, empty values, removal, invalid names and redirection
 freed all 383 allocations, reported zero memory errors, and left
 only three standard descriptors open.
 
+An interactive history Valgrind check covering recording, display,
+clearing, new entries after clearing, redirection and invalid arguments
+freed all 194 allocations, reported zero memory errors, and left
+only three standard descriptors open.
+
 These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
-Possible additions include history, advanced parameter expansion,
-autocomplete, logical operators and a project-specific memory allocator.
+Possible additions include persistent history, history recall,
+advanced parameter expansion, autocomplete, logical operators
+and a project-specific memory allocator.
 
 Each extension should define its behavior, update the relevant module
 interfaces and preserve the existing regression tests.
