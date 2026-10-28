@@ -2,6 +2,7 @@
 
 #include "builtins.h"
 #include "executor.h"
+#include "expansion.h"
 #include "input.h"
 #include "jobs.h"
 #include "lexer.h"
@@ -78,6 +79,15 @@ int main(void)
         if (lex_line(line, &tokens, error, sizeof(error)) == -1) {
             fprintf(stderr, "msh: %s\n", error);
             status = 2;
+            exit_warned = 0;
+            continue;
+        }
+
+        if (expand_tokens(&tokens, status,
+                          error, sizeof(error)) == -1) {
+            fprintf(stderr, "msh: %s\n", error);
+            free_tokens(&tokens);
+            status = EXIT_FAILURE;
             exit_warned = 0;
             continue;
         }

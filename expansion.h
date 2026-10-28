@@ -1,0 +1,21 @@
+#ifndef MSH_EXPANSION_H
+#define MSH_EXPANSION_H
+
+#include "lexer.h"
+
+#include <stddef.h>
+
+/*
+ * Expand $NAME and $? in word tokens using their original spelling.
+ * Single quotes and escaped dollar signs prevent expansion.
+ *
+ * Each word remains one token: no field splitting or wildcard expansion.
+ * Operator tokens and original spelling remain unchanged.
+ *
+ * Returns 0 on success, -1 on failure.
+ * On failure, discard the tokens using free_tokens().
+ */
+int expand_tokens(TokenList *tokens, int last_status,
+                  char *error, size_t error_size);
+
+#endif
