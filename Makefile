@@ -44,15 +44,20 @@ usage_test: usage_test.c jobs.o jobs.h
 usage_collection_test: usage_collection_test.c jobs.o jobs.h
 	$(CC) $(CFLAGS) usage_collection_test.c jobs.o -o usage_collection_test
 
-test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test
+statistics_test: statistics_test.c jobs.o jobs.h
+	$(CC) $(CFLAGS) statistics_test.c jobs.o -o statistics_test
+
+test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test
 	./lexer_test
 	./parser_test
 	./jobs_test
 	./expansion_test
 	./usage_test
 	./usage_collection_test
+	./statistics_test
 	python3 tests/integration_test.py
 	python3 tests/expansion_integration_test.py
+	python3 tests/statistics_integration_test.py
 
 clean:
-	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test
+	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test

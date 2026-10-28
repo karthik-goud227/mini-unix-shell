@@ -14,6 +14,70 @@
 #include <string.h>
 #include <unistd.h>
 
+static int builtin_stats(const Command *command)
+{
+    if (command->argc != 1) {
+        fprintf(stderr, "msh: stats: arguments are not supported\n");
+        return 2;
+    }
+
+    size_t count = jobs_statistics_count();
+
+    if (count == 0) {
+        return puts("No completed job statistics.") == EOF ? 1 : 0;
+    }
+
+    if (puts("Completed jobs (newest first):") == EOF) {
+        return 1;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        JobStatistics summary;
+
+        if (jobs_statistics_get(i, &summary) == -1) {
+            fprintf(stderr, "msh: stats: could not read history\n");
+            return 1;
+        }
+
+        if (printf("[%d] %s\n"
+                   "  Measured processes: %zu/%zu\n",
+                   summary.job_id, summary.command_text,
+                   summary.measured_process_count,
+                   summary.process_count) < 0) {
+            return 1;
+        }
+
+        if (summary.measured_process_count == 0) {
+            if (puts("  Resource measurements unavailable.") == EOF) {
+                return 1;
+            }
+            continue;
+        }
+
+        if (printf("  User CPU: %.6f s; System CPU: %.6f s\n"
+                   "  Largest process max RSS: %ld KiB\n",
+                   summary.user_cpu_seconds,
+                   summary.system_cpu_seconds,
+                   summary.largest_process_maxrss) < 0) {
+            return 1;
+        }
+
+        if (summary.measured_process_count < summary.process_count) {
+            if (puts("  Partial measurements: measured processes only.")
+                == EOF) {
+                return 1;
+            }
+        }
+    }
+
+    if (puts("Memory is the largest individual process peak, "
+             "not the total pipeline peak.") == EOF) {
+        return 1;
+    }
+
+    return 0;
+}
+
 static int builtin_cd(const Command *command)
 {
     if (command->argc > 2) {
@@ -226,7 +290,10 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 
     const char *name = command->argv[0];
 
-    if (strcmp(name, "bg") == 0) {
+    if (strcmp(name, "stats") == 0) {
+        result.handled = 1;
+        result.status = builtin_stats(command);
+    } else if (strcmp(name, "bg") == 0) {
         result.handled = 1;
         result.status = builtin_bg(command);
     } else if (strcmp(name, "fg") == 0) {
@@ -283,6 +350,7 @@ int is_builtin(const Command *command)
         || strcmp(name, "pwd") == 0
         || strcmp(name, "exit") == 0
         || strcmp(name, "jobs") == 0
+        || strcmp(name, "stats") == 0
         || strcmp(name, "fg") == 0
         || strcmp(name, "bg") == 0;
 }

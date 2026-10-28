@@ -16,6 +16,68 @@
 static Job *job_table[MSH_MAX_JOBS];
 static int next_job_id = 1;
 
+static JobStatistics statistics_history[MSH_STATS_HISTORY];
+static size_t statistics_count;
+
+size_t jobs_statistics_count(void)
+{
+    return statistics_count;
+}
+
+int jobs_statistics_get(size_t index, JobStatistics *result)
+{
+    if (result == NULL || index >= statistics_count) {
+        return -1;
+    }
+
+    *result = statistics_history[index];
+    return 0;
+}
+
+static void save_job_statistics(const Job *job)
+{
+    if (job->process_count == 0 || jobs_get_state(job) != JOB_DONE) {
+        return;
+    }
+
+    JobStatistics summary = {0};
+    summary.job_id = job->id;
+    summary.process_count = job->process_count;
+
+    snprintf(summary.command_text, sizeof(summary.command_text),
+             "%s", job->command_text);
+
+    for (size_t i = 0; i < job->process_count; i++) {
+        const Process *process = &job->processes[i];
+
+        if (!process->has_usage) {
+            continue;
+        }
+
+        summary.measured_process_count++;
+        summary.user_cpu_seconds +=
+            (double)process->usage.ru_utime.tv_sec
+            + (double)process->usage.ru_utime.tv_usec / 1000000.0;
+        summary.system_cpu_seconds +=
+            (double)process->usage.ru_stime.tv_sec
+            + (double)process->usage.ru_stime.tv_usec / 1000000.0;
+
+        if (process->usage.ru_maxrss > summary.largest_process_maxrss) {
+            summary.largest_process_maxrss = process->usage.ru_maxrss;
+        }
+    }
+
+    size_t retained = statistics_count;
+    if (retained == MSH_STATS_HISTORY) {
+        retained--;
+    }
+
+    memmove(&statistics_history[1], &statistics_history[0],
+            retained * sizeof(statistics_history[0]));
+    statistics_history[0] = summary;
+    statistics_count = retained + 1;
+}
+
 Job *jobs_create(const char *command_text)
 {
     size_t slot;
@@ -65,6 +127,7 @@ void jobs_remove(Job *job)
 
     for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
         if (job_table[i] == job) {
+            save_job_statistics(job);
             job_table[i] = NULL;
             free(job->command_text);
             free(job);

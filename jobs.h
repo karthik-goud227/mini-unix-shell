@@ -41,6 +41,33 @@ typedef struct {
     int has_terminal_modes;
 } Job;
 
+/*
+ * Completed-job history is limited to 16 entries.
+ * Command text fits the shell's 4096-byte input limit plus NUL.
+ */
+#define MSH_STATS_HISTORY 16
+#define MSH_STATS_COMMAND_SIZE 4097
+
+typedef struct {
+    int job_id;
+    char command_text[MSH_STATS_COMMAND_SIZE];
+
+    size_t process_count;
+    size_t measured_process_count;
+
+    double user_cpu_seconds;
+    double system_cpu_seconds;
+
+    /* Largest individual process ru_maxrss, not total pipeline peak. */
+    long largest_process_maxrss;
+} JobStatistics;
+
+/* Completed-job history: index 0 is the newest entry. */
+size_t jobs_statistics_count(void);
+
+/* Copy one summary; return 0 on success, -1 for invalid arguments. */
+int jobs_statistics_get(size_t index, JobStatistics *result);
+
 /* Creates a registered job with owned command text. */
 Job *jobs_create(const char *command_text);
 

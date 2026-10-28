@@ -56,7 +56,7 @@ make clean
 ## Supported features
 
 - External programs with arguments and PATH lookup
-- Built-ins: cd, pwd, exit, jobs, fg and bg
+- Built-ins: cd, pwd, exit, jobs, fg, bg and stats
 - Single and double quotes for argument grouping
 - Environment-variable expansion with $NAME
 - Previous command status expansion with $?
@@ -75,6 +75,7 @@ make clean
 - Terminal-mode preservation across stop and resume
 - SIGCHLD-driven background reaping while idle
 - Confirmed shutdown with active-job cleanup
+- Per-job CPU and memory statistics with bounded session history
 
 ## Examples
 
@@ -105,12 +106,13 @@ among the jobs currently listed.
   Without an argument, it preserves the previous status.
   Invalid arguments report an error and keep the shell running.
 - `jobs`: lists tracked jobs; accepts no arguments.
+- `stats`: displays saved completed-job statistics; accepts no arguments.
 - `fg %N`: places job N in the foreground and resumes it if stopped.
 - `bg %N`: resumes job N without giving it the terminal.
 
 All built-ins run in the parent for standalone foreground commands.
 Only pwd is permitted inside pipelines or background jobs.
-Redirection is supported for cd, pwd, exit and jobs.
+Redirection is supported for cd, pwd, exit, jobs and stats.
 Redirection on fg and bg is deliberately rejected.
 
 Job-control built-ins and background execution require an interactive
@@ -157,6 +159,55 @@ positional parameters such as `$1`, and special parameters such as `$$`
 are not implemented. Shell assignments, export and unset built-ins are
 also not implemented.
 
+## Job resource statistics
+
+Run `stats` to display up to 16 saved completed-job summaries,
+newest archived entry first. History is held in memory for the current
+shell session and is cleared when the shell exits.
+
+Example inside msh:
+
+```text
+sleep 1
+echo hello | cat
+stats
+stats > statistics.txt
+```
+
+Each entry contains:
+
+- Job ID and original command text.
+- Measured processes / total processes.
+- User CPU time summed across measured stages.
+- System CPU time summed across measured stages.
+- Largest individual process maximum resident set size, in KiB.
+
+One KiB is 1024 bytes. CPU time measures processor work, not elapsed
+time: a sleeping command can take one second while using very little CPU.
+
+The memory value is the largest reported process peak. It is not
+the sum of process peaks or the simultaneous peak memory of a pipeline.
+Measurements follow Linux wait4 accounting and are not a live memory
+monitor or a process-tree profiler.
+
+The shell collects resource usage with wait4 and saves final measurements
+only on termination. Stops and continued events do not finalize usage.
+Completed summaries are archived when their job records are removed;
+ordering therefore reflects archival order, not precise exit timestamps.
+
+Foreground, background and signal-terminated jobs can appear in history.
+Running and stopped jobs do not appear. A completed job can remain in
+statistics after it is no longer available to fg or bg.
+
+Parent-executed built-ins, including stats itself, do not create job
+entries. stats works in interactive and non-interactive sessions, supports
+redirection, and is rejected inside pipelines or background jobs.
+
+Entries with missing measurements show their coverage. Partial values
+represent only measured processes; unavailable measurements are not
+presented as genuine zero usage. Completed tracked children from failed
+launches may also be archived; a history entry does not imply success.
+
 ## Signals and job lifecycle
 
 One pipeline is one job, with one process record per stage.
@@ -166,7 +217,7 @@ terminal ownership until it finishes or stops. Children restore default
 signal actions before execution.
 
 Signal handlers wake the main loop through a nonblocking self-pipe.
-Job-table changes and waitpid calls happen outside signal handlers.
+Job-table changes and wait4 calls happen outside signal handlers.
 
 Background child statuses are collected while the shell waits for input.
 Completion and stop notifications are displayed at the next clean prompt.
@@ -196,6 +247,7 @@ mean the background program has finished successfully.
 - Maximum arguments per command: 128, including the command name
 - Maximum pipeline stages: 16
 - Maximum simultaneously registered jobs: 64
+- Completed-job statistics history: latest 16 archived entries
 
 Oversized input is discarded rather than partly executed.
 NUL bytes are rejected.
@@ -232,8 +284,8 @@ This is a display limitation and does not affect process control.
 | builtins.c | Parent built-ins and descriptor restoration |
 | redirection.c | File opening and standard-stream replacement |
 | terminal.c | Terminal ownership, modes and child signal defaults |
-| jobs.c | Job records, process states, notifications and cleanup |
-| job_control.c | Foreground waiting and job resumption |
+| jobs.c | Job states, resource collection, statistics history and cleanup |
+| job_control.c | Foreground waiting, resource collection and job resumption |
 | signals.c | Minimal signal handlers and self-pipe notifications |
 
 ## Automated tests
@@ -242,15 +294,23 @@ This is a display limitation and does not affect process control.
 make test
 ```
 
-This builds and runs lexer, parser and job-state test programs,
-plus 17 expansion unit tests and 35 whole-shell integration tests
-(24 general tests and 11 expansion tests).
+This builds and runs lexer and parser tests, plus:
+
+- 12 job-state and resource-lifecycle checks.
+- 17 expansion unit tests.
+- 9 resource-recorder checks.
+- 5 actual resource-collection checks.
+- 16 completed-job history checks.
+- 45 whole-shell integration tests: 24 general, 11 expansion and
+  10 statistics tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
 Expansion integration tests also cover quote handling, empty values,
 pipeline statuses, expanded filenames and built-in arguments.
-They use temporary directories and clean up their test files.
+Statistics integration tests cover output, measurement coverage,
+ordering, redirection, argument validation and history limits.
+Integration tests use temporary directories and clean up their test files.
 
 Interactive job control additionally requires manual or PTY tests.
 
@@ -265,6 +325,8 @@ Interactive job control additionally requires manual or PTY tests.
   restored and fg resumes with the program's saved terminal settings.
 - Confirm exit warnings and cleanup with a live job.
 - Cancel unfinished prompt input with Ctrl+C.
+- Verify stats after background completion and foreground interruption.
+- Verify stopped jobs stay out of completed statistics until termination.
 
 ## Memory and descriptor checks
 
@@ -283,13 +345,18 @@ The expansion unit tests were also checked under Valgrind:
 all 17 passed, all 154 allocations were freed, zero memory errors
 were reported, and only three standard descriptors remained open.
 
+With statistics enabled, a full-shell Valgrind check covering empty
+history, commands, a pipeline, stats output, redirection and invalid
+stats arguments freed all 140 allocations, reported zero memory
+errors, and left only three standard descriptors open.
+
 These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
 Possible additions include history, export/unset built-ins,
 advanced parameter expansion, autocomplete, logical operators,
-job resource statistics and a project-specific memory allocator.
+and a project-specific memory allocator.
 
 Each extension should define its behavior, update the relevant module
 interfaces and preserve the existing regression tests.
