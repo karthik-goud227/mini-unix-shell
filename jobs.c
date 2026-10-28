@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200809L
 
 #include "jobs.h"
@@ -116,6 +117,37 @@ void jobs_record_status(pid_t pid, int wait_status)
     }
 }
 
+void jobs_record_usage(pid_t pid, int wait_status,
+                       const struct rusage *usage)
+{
+    jobs_record_status(pid, wait_status);
+
+    if (usage == NULL
+        || !(WIFEXITED(wait_status) || WIFSIGNALED(wait_status))) {
+        return;
+    }
+
+    for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
+        Job *job = job_table[i];
+
+        if (job == NULL) {
+            continue;
+        }
+
+        for (size_t j = 0; j < job->process_count; j++) {
+            Process *process = &job->processes[j];
+
+            if (process->pid == pid) {
+                if (!process->has_usage) {
+                    process->usage = *usage;
+                    process->has_usage = 1;
+                }
+                return;
+            }
+        }
+    }
+}
+
 JobState jobs_get_state(const Job *job)
 {
     size_t unfinished = 0;
@@ -160,11 +192,12 @@ void jobs_reap_pending(void)
 {
     for (;;) {
         int status;
-        pid_t pid = waitpid(-1, &status,
-                            WNOHANG | WUNTRACED | WCONTINUED);
+        struct rusage usage = {0};
+        pid_t pid = wait4(-1, &status,
+                          WNOHANG | WUNTRACED | WCONTINUED, &usage);
 
         if (pid > 0) {
-            jobs_record_status(pid, status);
+            jobs_record_usage(pid, status, &usage);
         } else if (pid == -1 && errno == EINTR) {
             continue;
         } else {
@@ -247,14 +280,15 @@ void jobs_shutdown(void)
             }
 
             int status;
+            struct rusage usage = {0};
             pid_t pid;
 
             do {
-                pid = waitpid(process->pid, &status, 0);
+                pid = wait4(process->pid, &status, 0, &usage);
             } while (pid == -1 && errno == EINTR);
 
             if (pid > 0) {
-                jobs_record_status(pid, status);
+                jobs_record_usage(pid, status, &usage);
             }
         }
 

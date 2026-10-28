@@ -2,6 +2,7 @@
 #define MSH_JOBS_H
 
 #include <stddef.h>
+#include <sys/resource.h>
 #include <sys/types.h>
 #include <termios.h>
 
@@ -13,6 +14,10 @@ typedef struct {
     int wait_status;
     int completed;
     int stopped;
+
+    /* Final resource measurements collected when the child terminates. */
+    struct rusage usage;
+    int has_usage;
 } Process;
 
 typedef enum {
@@ -46,6 +51,10 @@ Job *jobs_find(int id);
 
 /* Records one waitpid() result in the matching process. */
 void jobs_record_status(pid_t pid, int wait_status);
+
+/* Record status and final resource usage, when available. */
+void jobs_record_usage(pid_t pid, int wait_status,
+                       const struct rusage *usage);
 
 JobState jobs_get_state(const Job *job);
 

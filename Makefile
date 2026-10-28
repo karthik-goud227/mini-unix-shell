@@ -38,13 +38,21 @@ jobs_test: jobs_test.c jobs.o jobs.h
 expansion_test: expansion_test.c expansion.o lexer.o expansion.h lexer.h
 	$(CC) $(CFLAGS) expansion_test.c expansion.o lexer.o -o expansion_test
 
-test: msh lexer_test parser_test jobs_test expansion_test
+usage_test: usage_test.c jobs.o jobs.h
+	$(CC) $(CFLAGS) usage_test.c jobs.o -o usage_test
+
+usage_collection_test: usage_collection_test.c jobs.o jobs.h
+	$(CC) $(CFLAGS) usage_collection_test.c jobs.o -o usage_collection_test
+
+test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test
 	./lexer_test
 	./parser_test
 	./jobs_test
 	./expansion_test
+	./usage_test
+	./usage_collection_test
 	python3 tests/integration_test.py
 	python3 tests/expansion_integration_test.py
 
 clean:
-	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test
+	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test

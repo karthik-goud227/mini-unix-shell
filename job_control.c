@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200809L
 
 #include "job_control.h"
@@ -87,7 +88,9 @@ int job_foreground(Job *job, int resume, int *command_status)
 
     while (jobs_get_state(job) == JOB_RUNNING) {
         int status;
-        pid_t pid = waitpid(-1, &status, WUNTRACED | WCONTINUED);
+        struct rusage usage = {0};
+        pid_t pid = wait4(-1, &status,
+                          WUNTRACED | WCONTINUED, &usage);
 
         if (pid == -1) {
             if (errno == EINTR) {
@@ -103,7 +106,7 @@ int job_foreground(Job *job, int resume, int *command_status)
          * Record every returned child's status, including another
          * job finishing while this one owns the foreground.
          */
-        jobs_record_status(pid, status);
+        jobs_record_usage(pid, status, &usage);
     }
 
     if (!failed && jobs_get_state(job) == JOB_STOPPED

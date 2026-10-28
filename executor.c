@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE
 #define _POSIX_C_SOURCE 200809L
 
 #include "executor.h"
@@ -37,8 +38,16 @@ static void terminate_job(Job *job)
             continue;
         }
 
-        while (waitpid(job->processes[i].pid, NULL, 0) == -1
-               && errno == EINTR) {
+        int status;
+        struct rusage usage = {0};
+        pid_t pid;
+
+        do {
+            pid = wait4(job->processes[i].pid, &status, 0, &usage);
+        } while (pid == -1 && errno == EINTR);
+
+        if (pid > 0) {
+            jobs_record_usage(pid, status, &usage);
         }
     }
 }
