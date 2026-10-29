@@ -403,6 +403,7 @@ This builds and runs lexer and parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
+- 23 interactive job-control checks using a pseudo-terminal (PTY).
 - 62 whole-shell integration tests: 24 general, 11 expansion,
   10 statistics and 17 environment tests.
 
@@ -420,8 +421,13 @@ The history PTY tests check recording, clearing, original spelling,
 syntax-error retention, redirection, validation and the 100-entry limit.
 They use Python's standard library and require a usable PTY facility.
 
-Interactive job-control behaviors such as Ctrl+C and Ctrl+Z still
-require their separate manual or PTY checks.
+The job-control PTY tests cover foreground terminal ownership,
+Ctrl+C interruption and status 130, Ctrl+Z stopping, bg/fg resumption,
+prompt input cancellation, terminal-mode restoration and normal exit.
+They run automatically through make test using Python's standard library.
+
+The manual checks below remain useful for additional scenarios,
+including background terminal readers, idle reaping and active-job shutdown.
 
 ## Manual job-control checks
 
