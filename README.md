@@ -442,8 +442,9 @@ Single quotes preserve literal text; double quotes allow variable
 expansion. Unquoted semicolons separate list items.
 Unquoted parentheses and backticks are still rejected.
 
-Foreground Ctrl+C may leave `^C` adjacent to the next prompt.
-This is a display limitation and does not affect process control.
+After a foreground job completes with a process terminated by SIGINT,
+the interactive shell prints a newline before subsequent shell output.
+A normal exit with numeric status 130 does not trigger this newline.
 
 ## Architecture
 
@@ -481,7 +482,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 39 interactive job-control checks using a pseudo-terminal (PTY).
+- 40 interactive job-control checks using a pseudo-terminal (PTY).
 - 96 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics and 17 environment tests.
 

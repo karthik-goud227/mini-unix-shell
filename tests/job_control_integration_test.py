@@ -91,7 +91,11 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
             raise RuntimeError("Foreground handoff failed")
 
         send("\x03")
-        read_until(b"msh> ")
+        output = read_until(b"msh> ")
+        check(
+            "foreground Ctrl+C places prompt on a new line",
+            output.endswith("\nmsh> "),
+        )
 
         reclaimed = os.tcgetpgrp(terminal) == pid
         check("shell reclaims terminal after Ctrl+C", reclaimed)

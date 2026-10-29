@@ -134,6 +134,23 @@ reclaim:
         return -1;
     }
 
+    /*
+     * Separate the terminal's Ctrl+C echo from subsequent shell output.
+     * Inspect actual signal termination, not just numeric exit code 130.
+     */
+    if (terminal_is_interactive() && jobs_get_state(job) == JOB_DONE) {
+        for (size_t i = 0; i < job->process_count; i++) {
+            const Process *process = &job->processes[i];
+
+            if (process->completed
+                && WIFSIGNALED(process->wait_status)
+                && WTERMSIG(process->wait_status) == SIGINT) {
+                fputc('\n', stderr);
+                break;
+            }
+        }
+    }
+
     *command_status = get_job_status(job);
     return 0;
 }
