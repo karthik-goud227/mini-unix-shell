@@ -6,7 +6,8 @@
 
 static int is_operator(char c)
 {
-    return c == '|' || c == '<' || c == '>' || c == '&';
+    return c == '|' || c == '<' || c == '>'
+        || c == '&' || c == ';';
 }
 
 static int is_space(char c)
@@ -71,6 +72,7 @@ int lex_line(const char *line, TokenList *result,
             case '<': type = TOKEN_IN; break;
             case '>': type = TOKEN_OUT; break;
             case '&': type = TOKEN_AMP; break;
+            case ';': type = TOKEN_SEMI; break;
             }
 
             if (op == '>' && line[i] == '>') {
@@ -81,7 +83,7 @@ int lex_line(const char *line, TokenList *result,
             while (line[i] != '\0'
                    && !is_space(line[i])
                    && !is_operator(line[i])) {
-                if (line[i] == ';' || line[i] == '('
+                if (line[i] == '('
                     || line[i] == ')' || line[i] == '`') {
                     message = "unsupported unquoted shell syntax";
                     goto fail;

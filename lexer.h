@@ -9,7 +9,8 @@ typedef enum {
     TOKEN_IN,
     TOKEN_OUT,
     TOKEN_APPEND,
-    TOKEN_AMP
+    TOKEN_AMP,
+    TOKEN_SEMI
 } TokenType;
 
 typedef struct {

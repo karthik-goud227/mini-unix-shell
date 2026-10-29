@@ -174,6 +174,11 @@ int parse_pipeline(const TokenList *tokens, Pipeline *result,
             }
             break;
 
+        case TOKEN_SEMI:
+            message = "unsupported unquoted shell syntax "
+                      "(command lists not enabled yet)";
+            goto fail;
+
         case TOKEN_AMP:
             if (command->argc == 0 || i + 1 != tokens->count) {
                 message = "'&' must follow a command and end the line";
