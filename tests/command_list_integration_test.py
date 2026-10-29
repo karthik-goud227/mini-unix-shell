@@ -149,5 +149,89 @@ check(
     error="nosuchcommand_msh_list_test",
 )
 
+
+check(
+    "AND executes after success",
+    "true && echo success\nexit\n",
+    "success\n",
+)
+check(
+    "AND skips after failure and preserves status",
+    "false && echo forbidden\nexit\n",
+    expected_status=1,
+)
+check(
+    "OR executes after failure",
+    "false || echo recovered\nexit\n",
+    "recovered\n",
+)
+check(
+    "OR skips after success and preserves status",
+    "true || echo forbidden\nexit\n",
+)
+check(
+    "mixed chain reaches fallback",
+    "false && echo forbidden || echo fallback\nexit\n",
+    "fallback\n",
+)
+check(
+    "logical operators associate left to right",
+    "true || echo forbidden && echo final\nexit\n",
+    "final\n",
+)
+check(
+    "semicolon resets conditional execution",
+    "false && echo forbidden; echo always\nexit\n",
+    "always\n",
+)
+check(
+    "pipeline last stage controls logical execution",
+    "false | true && echo success; true | false || echo recovered\nexit\n",
+    "success\nrecovered\n",
+)
+check(
+    "skipped export leaves environment unchanged",
+    'export MSH_LIST_TEST=old; false && export MSH_LIST_TEST=new; '
+    'echo "$MSH_LIST_TEST"\nexit\n',
+    "old\n",
+)
+check(
+    "executed export affects later expansion",
+    'false || export MSH_LIST_TEST=new; echo "$MSH_LIST_TEST"\nexit\n',
+    "new\n",
+)
+check(
+    "status expansion uses last executed command",
+    "false && echo forbidden || echo $?; true || false; echo $?\nexit\n",
+    "1\n0\n",
+)
+check(
+    "skipped exit keeps shell running",
+    "false && exit 7; true || exit 8; echo alive\nexit\n",
+    "alive\n",
+)
+check(
+    "executed exit stops remaining list",
+    "false || exit 7; echo forbidden\n",
+    expected_status=7,
+)
+check(
+    "skipped redirection does not truncate file",
+    "echo kept > data; false && echo forbidden > data; cat < data\nexit\n",
+    "kept\n",
+)
+check(
+    "trailing logical operator prevents earlier execution",
+    "echo forbidden; true &&\nexit\n",
+    expected_status=2,
+    error="expected pipeline after logical operator",
+)
+check(
+    "skipped branch still requires valid syntax",
+    "echo forbidden; true || echo broken >\nexit\n",
+    expected_status=2,
+    error="expected filename after redirection",
+)
+
 print(f"\nTests: {total}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

@@ -231,27 +231,50 @@ int parse_command_list(const TokenList *tokens, CommandList *result,
     }
 
     size_t start = 0;
+    ListCondition condition = LIST_ALWAYS;
 
     for (size_t i = 0; i <= tokens->count; i++) {
         int at_end = i == tokens->count;
 
-        if (!at_end && tokens->items[i].type != TOKEN_SEMI) {
-            if (tokens->items[i].type == TOKEN_AMP
-                && i + 1 != tokens->count) {
-                if (error_size > 0) {
-                    snprintf(error, error_size,
-                             "'&' must end the input for now at position %zu",
-                             tokens->items[i].position);
+        int separator = !at_end
+            && (tokens->items[i].type == TOKEN_SEMI
+                || tokens->items[i].type == TOKEN_AND_IF
+                || tokens->items[i].type == TOKEN_OR_IF);
+
+        if (!at_end && !separator) {
+            if (tokens->items[i].type == TOKEN_AMP) {
+                if (i + 1 != tokens->count) {
+                    if (error_size > 0) {
+                        snprintf(error, error_size,
+                                 "'&' must end the input for now at position %zu",
+                                 tokens->items[i].position);
+                    }
+                    goto fail;
                 }
-                goto fail;
+
+                if (condition != LIST_ALWAYS) {
+                    if (error_size > 0) {
+                        snprintf(error, error_size,
+                                 "background logical chains are not supported");
+                    }
+                    goto fail;
+                }
             }
             continue;
         }
 
         if (i == start) {
-            if (at_end) {
+            if (at_end && condition == LIST_ALWAYS) {
                 /* Empty input or a single trailing semicolon. */
                 break;
+            }
+
+            if (at_end) {
+                if (error_size > 0) {
+                    snprintf(error, error_size,
+                             "expected pipeline after logical operator");
+                }
+                goto fail;
             }
 
             if (error_size > 0) {
@@ -289,12 +312,21 @@ int parse_command_list(const TokenList *tokens, CommandList *result,
         result->items = grown;
         result->items[result->count++] = (CommandListItem) {
             .token_start = start,
-            .token_count = i - start
+            .token_count = i - start,
+            .condition = condition
         };
 
         if (at_end) {
             break;
         }
+        if (tokens->items[i].type == TOKEN_AND_IF) {
+            condition = LIST_ON_SUCCESS;
+        } else if (tokens->items[i].type == TOKEN_OR_IF) {
+            condition = LIST_ON_FAILURE;
+        } else {
+            condition = LIST_ALWAYS;
+        }
+
         start = i + 1;
     }
 

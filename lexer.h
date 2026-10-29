@@ -10,7 +10,9 @@ typedef enum {
     TOKEN_OUT,
     TOKEN_APPEND,
     TOKEN_AMP,
-    TOKEN_SEMI
+    TOKEN_SEMI,
+    TOKEN_AND_IF,
+    TOKEN_OR_IF
 } TokenType;
 
 typedef struct {

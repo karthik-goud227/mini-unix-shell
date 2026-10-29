@@ -69,6 +69,7 @@ make clean
 - Multiple redirections applied in source order
 - Concurrent pipelines with multiple stages
 - Sequential command lists separated by semicolons
+- Conditional execution with && and ||
 - Background execution with a trailing &
 - Process-group foreground/background job management
 - Ctrl+C for foreground interruption and prompt cancellation
@@ -126,7 +127,7 @@ Redirection on fg and bg is deliberately rejected.
 Job-control built-ins and background execution require an interactive
 terminal. Non-interactive foreground commands and pipelines are supported.
 
-## Semicolon command lists
+## Command lists and conditional execution
 
 Separate commands or pipelines with an unquoted semicolon:
 
@@ -160,10 +161,27 @@ the next item to run.
 History records the whole submitted line as one entry. Job records and
 stats use each pipeline's own original command text.
 
-For now, & is allowed only at the end of the entire input, and requires
-an interactive terminal. It backgrounds only the final pipeline.
-Background separators within lists and logical operators && and ||
-are not implemented yet.
+Logical operators control whether the next pipeline executes:
+
+- a && b: execute b only if a succeeds (status 0).
+- a || b: execute b only if a fails (nonzero status).
+- Both operators have equal precedence and associate left to right.
+- A semicolon starts an unconditional next item.
+- Skipped items do not expand words, apply redirections, run built-ins
+  or change the previous status.
+
+For example, true || echo skipped && echo final prints final.
+The list returns the status of the last pipeline actually executed.
+A pipeline's last stage determines its status.
+
+The entire line is syntax-checked, including skipped items.
+A trailing && or || is rejected before any commands execute.
+
+For now, & is allowed only at the end of the entire input and requires
+an interactive terminal. It backgrounds only a final unconditional
+pipeline. Background logical chains such as true && sleep 1 & are
+rejected. A separate final job, such as true && echo done; sleep 1 &,
+is allowed. Background separators within lists are not implemented yet.
 
 ## Variable expansion
 
@@ -203,8 +221,8 @@ variables. This intentionally differs from full POSIX shell behavior.
 Inserted values are not expanded again or interpreted as shell syntax.
 For example, a pipe character inside a variable does not create a pipeline.
 All `$?` references within one pipeline use the status from before
-that pipeline. A later semicolon-separated item sees the status
-left by the preceding item.
+that pipeline. A later executed list item sees the status left by
+the last executed item; skipped items leave that status unchanged.
 
 Only `$NAME` and `$?` are supported. Braced expansion such as `${HOME}`,
 positional parameters such as `$1`, and special parameters such as `$$`
@@ -401,7 +419,6 @@ The current implementation does not support:
 - Field splitting of expanded values
 - Wildcard expansion
 - Command substitution
-- Logical operators && and ||
 - Background separators within command lists
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
@@ -420,7 +437,7 @@ This is a display limitation and does not affect process control.
 
 | Module | Responsibility |
 | --- | --- |
-| main.c | Initialization, sequential list execution, status and shutdown |
+| main.c | Initialization, conditional list execution, status and shutdown |
 | input.c | Bounded input and poll-based event waiting |
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
@@ -440,10 +457,10 @@ This is a display limitation and does not affect process control.
 make test
 ```
 
-This builds and runs lexer tests (including four semicolon assertions)
-and the existing pipeline parser tests, plus:
+This builds and runs lexer tests (including four semicolon and ten
+logical-operator assertions) and the existing pipeline parser tests, plus:
 
-- 16 command-list parser tests.
+- 33 command-list parser tests.
 
 - 12 job-state and resource-lifecycle checks.
 - 17 expansion unit tests.
@@ -453,8 +470,8 @@ and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 23 interactive job-control checks using a pseudo-terminal (PTY).
-- 80 non-interactive whole-shell integration tests: 24 general,
-  18 command-list, 11 expansion, 10 statistics and 17 environment tests.
+- 96 non-interactive whole-shell integration tests: 24 general,
+  34 command-list, 11 expansion, 10 statistics and 17 environment tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -466,6 +483,8 @@ Environment integration tests cover assignment, replacement, child
 inheritance, empty values, removal, validation and redirection behavior.
 Command-list integration tests cover ordering, expansion timing,
 pipelines, redirection, exit behavior and whole-list syntax validation.
+They also check conditional execution, left-to-right evaluation,
+status preservation and prevention of side effects in skipped items.
 Integration tests use temporary directories and clean up their test files.
 
 The history PTY tests check recording, clearing, original spelling,
@@ -532,13 +551,22 @@ status and variable expansion, pipelines, redirection, malformed lists
 and early exit freed all 427 allocations, reported zero memory errors,
 and left only three standard descriptors open.
 
+A logical-execution Valgrind check covering executed and skipped items,
+mixed logical chains, pipelines, environment changes and syntax errors
+freed all 510 allocations, reported zero memory errors, and left only
+three standard descriptors open.
+
 These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
-Possible additions include persistent history, history recall,
-advanced parameter expansion, autocomplete, logical operators
-and a project-specific memory allocator.
+The next priority is broader coverage of the base paper's shell behavior,
+including background lists, shell variables, parameter expansion,
+scripts, control structures, grouping and command substitution.
+
+Further extensions such as persistent history, history recall,
+autocomplete and a project-specific memory allocator are deferred
+until that work is complete.
 
 Each extension should define its behavior, update the relevant module
 interfaces and preserve the existing regression tests.

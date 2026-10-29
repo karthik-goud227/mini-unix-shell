@@ -104,6 +104,11 @@ int main(void)
         for (size_t i = 0; i < list.count; i++) {
             CommandListItem item = list.items[i];
 
+            if ((item.condition == LIST_ON_SUCCESS && status != 0)
+                || (item.condition == LIST_ON_FAILURE && status == 0)) {
+                continue;
+            }
+
             /* This view borrows tokens; only the full list owns them. */
             TokenList part = {
                 .items = tokens.items + item.token_start,

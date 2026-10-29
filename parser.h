@@ -45,10 +45,17 @@ int parse_pipeline(const TokenList *tokens, Pipeline *result,
 
 void free_pipeline(Pipeline *pipeline);
 
-/* One pipeline's range within the original token list. */
+typedef enum {
+    LIST_ALWAYS = 0,
+    LIST_ON_SUCCESS,
+    LIST_ON_FAILURE
+} ListCondition;
+
+/* One pipeline's token range and condition for execution. */
 typedef struct {
     size_t token_start;
     size_t token_count;
+    ListCondition condition;
 } CommandListItem;
 
 typedef struct {

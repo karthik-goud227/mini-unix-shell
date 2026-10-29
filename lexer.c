@@ -78,6 +78,12 @@ int lex_line(const char *line, TokenList *result,
             if (op == '>' && line[i] == '>') {
                 word[used++] = line[i++];
                 type = TOKEN_APPEND;
+            } else if (op == '&' && line[i] == '&') {
+                word[used++] = line[i++];
+                type = TOKEN_AND_IF;
+            } else if (op == '|' && line[i] == '|') {
+                word[used++] = line[i++];
+                type = TOKEN_OR_IF;
             }
         } else {
             while (line[i] != '\0'
