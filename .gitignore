@@ -10,3 +10,4 @@ expansion_test
 usage_test
 usage_collection_test
 statistics_test
+command_list_test

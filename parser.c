@@ -210,3 +210,97 @@ fail:
     free_pipeline(result);
     return -1;
 }
+
+void free_command_list(CommandList *list)
+{
+    if (list == NULL) {
+        return;
+    }
+
+    free(list->items);
+    *list = (CommandList) {0};
+}
+
+int parse_command_list(const TokenList *tokens, CommandList *result,
+                       char *error, size_t error_size)
+{
+    *result = (CommandList) {0};
+
+    if (error_size > 0) {
+        error[0] = '\0';
+    }
+
+    size_t start = 0;
+
+    for (size_t i = 0; i <= tokens->count; i++) {
+        int at_end = i == tokens->count;
+
+        if (!at_end && tokens->items[i].type != TOKEN_SEMI) {
+            if (tokens->items[i].type == TOKEN_AMP
+                && i + 1 != tokens->count) {
+                if (error_size > 0) {
+                    snprintf(error, error_size,
+                             "'&' must end the input for now at position %zu",
+                             tokens->items[i].position);
+                }
+                goto fail;
+            }
+            continue;
+        }
+
+        if (i == start) {
+            if (at_end) {
+                /* Empty input or a single trailing semicolon. */
+                break;
+            }
+
+            if (error_size > 0) {
+                snprintf(error, error_size,
+                         "empty command in list at position %zu",
+                         tokens->items[i].position);
+            }
+            goto fail;
+        }
+
+        /* Borrow this range; do not free its tokens. */
+        TokenList part = {
+            .items = tokens->items + start,
+            .count = i - start
+        };
+        Pipeline pipeline;
+
+        if (parse_pipeline(&part, &pipeline, error, error_size) == -1) {
+            goto fail;
+        }
+        free_pipeline(&pipeline);
+
+        CommandListItem *grown = realloc(
+            result->items,
+            (result->count + 1) * sizeof(*grown)
+        );
+
+        if (grown == NULL) {
+            if (error_size > 0) {
+                snprintf(error, error_size, "out of memory");
+            }
+            goto fail;
+        }
+
+        result->items = grown;
+        result->items[result->count++] = (CommandListItem) {
+            .token_start = start,
+            .token_count = i - start
+        };
+
+        if (at_end) {
+            break;
+        }
+        start = i + 1;
+    }
+
+    return 0;
+
+fail:
+    free_command_list(result);
+    return -1;
+}

@@ -125,7 +125,7 @@ with tempfile.TemporaryDirectory(prefix="msh-tests-") as workdir:
 
     check(
         "syntax error recovery",
-        "echo forbidden; echo forbidden\n"
+        "echo forbidden (bad)\n"
         "echo recovered\nexit 0\n",
         "recovered\n",
         error_contains="unsupported unquoted shell syntax",

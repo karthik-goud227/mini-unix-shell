@@ -68,6 +68,7 @@ make clean
 - Output append: >>
 - Multiple redirections applied in source order
 - Concurrent pipelines with multiple stages
+- Sequential command lists separated by semicolons
 - Background execution with a trailing &
 - Process-group foreground/background job management
 - Ctrl+C for foreground interruption and prompt cancellation
@@ -125,10 +126,51 @@ Redirection on fg and bg is deliberately rejected.
 Job-control built-ins and background execution require an interactive
 terminal. Non-interactive foreground commands and pipelines are supported.
 
+## Semicolon command lists
+
+Separate commands or pipelines with an unquoted semicolon:
+
+```text
+echo first; echo second
+echo hello | cat; echo done
+false; echo $?
+export MSH_LIST_TEST=hello; echo "$MSH_LIST_TEST"
+```
+
+Items execute in order. An ordinary command failure does not prevent the
+next item from running. The list's final status is the status of its last
+executed item.
+
+A trailing semicolon is allowed. Leading or repeated semicolons are
+rejected. Quoted or escaped semicolons remain literal argument text.
+
+The entire input line is lexed and syntax-checked before execution.
+A syntax error in a later item prevents earlier items from running.
+This does not precheck runtime failures such as missing commands or files.
+
+Expansion happens separately before each pipeline executes. Later items
+therefore see environment changes and exit statuses from earlier items.
+For example, false; echo $? prints 1.
+
+A valid exit request stops the remaining items. With active jobs, the
+existing interactive confirmation warning still applies, and the rest
+of that line is skipped. Invalid exit arguments report an error and allow
+the next item to run.
+
+History records the whole submitted line as one entry. Job records and
+stats use each pipeline's own original command text.
+
+For now, & is allowed only at the end of the entire input, and requires
+an interactive terminal. It backgrounds only the final pipeline.
+Background separators within lists and logical operators && and ||
+are not implemented yet.
+
 ## Variable expansion
 
-Expansion runs after lexing and before parsing, using the original
-token spelling to preserve quote and escape boundaries.
+The shell first lexes and validates the unexpanded command list.
+Before each pipeline executes, its tokens are expanded and parsed
+into executable commands. Original token spelling preserves quote
+and escape boundaries.
 
 - `$NAME` reads the shell's current environment, including inherited
   variables and values set using export.
@@ -160,7 +202,9 @@ variables. This intentionally differs from full POSIX shell behavior.
 
 Inserted values are not expanded again or interpreted as shell syntax.
 For example, a pipe character inside a variable does not create a pipeline.
-All `$?` references on one input line use the status from before that line.
+All `$?` references within one pipeline use the status from before
+that pipeline. A later semicolon-separated item sees the status
+left by the preceding item.
 
 Only `$NAME` and `$?` are supported. Braced expansion such as `${HOME}`,
 positional parameters such as `$1`, and special parameters such as `$$`
@@ -357,7 +401,8 @@ The current implementation does not support:
 - Field splitting of expanded values
 - Wildcard expansion
 - Command substitution
-- Semicolon command lists or logical operators && and ||
+- Logical operators && and ||
+- Background separators within command lists
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
 - Bare or per-command assignments, loops, functions or a scripting language
@@ -365,7 +410,8 @@ The current implementation does not support:
 - A custom memory allocator
 
 Single quotes preserve literal text; double quotes allow variable
-expansion. Unquoted semicolons, parentheses and backticks are rejected.
+expansion. Unquoted semicolons separate list items.
+Unquoted parentheses and backticks are still rejected.
 
 Foreground Ctrl+C may leave `^C` adjacent to the next prompt.
 This is a display limitation and does not affect process control.
@@ -374,12 +420,12 @@ This is a display limitation and does not affect process control.
 
 | Module | Responsibility |
 | --- | --- |
-| main.c | Initialization, dispatch, status and shutdown |
+| main.c | Initialization, sequential list execution, status and shutdown |
 | input.c | Bounded input and poll-based event waiting |
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
 | expansion.c | Quote-aware environment and previous-status expansion |
-| parser.c | Commands, ordered redirections and pipelines |
+| parser.c | Command-list validation, token ranges, pipelines and redirections |
 | executor.c | Pipes, fork/exec, grouping and launch synchronization |
 | builtins.c | Parent built-ins and descriptor restoration |
 | redirection.c | File opening and standard-stream replacement |
@@ -394,7 +440,10 @@ This is a display limitation and does not affect process control.
 make test
 ```
 
-This builds and runs lexer and parser tests, plus:
+This builds and runs lexer tests (including four semicolon assertions)
+and the existing pipeline parser tests, plus:
+
+- 16 command-list parser tests.
 
 - 12 job-state and resource-lifecycle checks.
 - 17 expansion unit tests.
@@ -404,8 +453,8 @@ This builds and runs lexer and parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 23 interactive job-control checks using a pseudo-terminal (PTY).
-- 62 whole-shell integration tests: 24 general, 11 expansion,
-  10 statistics and 17 environment tests.
+- 80 non-interactive whole-shell integration tests: 24 general,
+  18 command-list, 11 expansion, 10 statistics and 17 environment tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -415,6 +464,8 @@ Statistics integration tests cover output, measurement coverage,
 ordering, redirection, argument validation and history limits.
 Environment integration tests cover assignment, replacement, child
 inheritance, empty values, removal, validation and redirection behavior.
+Command-list integration tests cover ordering, expansion timing,
+pipelines, redirection, exit behavior and whole-list syntax validation.
 Integration tests use temporary directories and clean up their test files.
 
 The history PTY tests check recording, clearing, original spelling,
@@ -475,6 +526,11 @@ An interactive history Valgrind check covering recording, display,
 clearing, new entries after clearing, redirection and invalid arguments
 freed all 194 allocations, reported zero memory errors, and left
 only three standard descriptors open.
+
+A command-list Valgrind check covering sequential execution,
+status and variable expansion, pipelines, redirection, malformed lists
+and early exit freed all 427 allocations, reported zero memory errors,
+and left only three standard descriptors open.
 
 These results cover the exercised scenarios, not every possible failure.
 

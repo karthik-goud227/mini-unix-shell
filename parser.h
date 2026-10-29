@@ -45,4 +45,28 @@ int parse_pipeline(const TokenList *tokens, Pipeline *result,
 
 void free_pipeline(Pipeline *pipeline);
 
+/* One pipeline's range within the original token list. */
+typedef struct {
+    size_t token_start;
+    size_t token_count;
+} CommandListItem;
+
+typedef struct {
+    CommandListItem *items;
+    size_t count;
+} CommandList;
+
+/*
+ * Validate and divide unexpanded tokens into command-list items.
+ * Returns 0 on success, -1 on failure.
+ * Empty input succeeds with count == 0.
+ *
+ * The list owns its items array, but does not own the tokens.
+ * Keep the original tokens alive while using these ranges.
+ */
+int parse_command_list(const TokenList *tokens, CommandList *result,
+                       char *error, size_t error_size);
+
+void free_command_list(CommandList *list);
+
 #endif

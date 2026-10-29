@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 int main(void)
 {
@@ -78,7 +79,7 @@ int main(void)
         }
 
         TokenList tokens;
-        Pipeline pipeline;
+        CommandList list;
         char error[128];
 
         if (lex_line(line, &tokens, error, sizeof(error)) == -1) {
@@ -88,48 +89,90 @@ int main(void)
             continue;
         }
 
-        if (expand_tokens(&tokens, status,
-                          error, sizeof(error)) == -1) {
+        /* Validate the whole list before executing any part of it. */
+        if (parse_command_list(&tokens, &list,
+                               error, sizeof(error)) == -1) {
             fprintf(stderr, "msh: %s\n", error);
             free_tokens(&tokens);
-            status = EXIT_FAILURE;
-            exit_warned = 0;
-            continue;
-        }
-
-        int parsed = parse_pipeline(&tokens, &pipeline,
-                                    error, sizeof(error));
-        free_tokens(&tokens);
-
-        if (parsed == -1) {
-            fprintf(stderr, "msh: %s\n", error);
             status = 2;
             exit_warned = 0;
             continue;
         }
 
-        if (pipeline.command_count == 0) {
-            free_pipeline(&pipeline);
-            continue;
-        }
-
         int should_exit = 0;
 
-        if (pipeline.command_count == 1 && !pipeline.background) {
-            BuiltinResult result =
-                run_builtin_redirected(&pipeline.commands[0], status);
+        for (size_t i = 0; i < list.count; i++) {
+            CommandListItem item = list.items[i];
 
-            if (result.handled) {
-                status = result.status;
-                should_exit = result.should_exit;
-            } else {
-                status = execute_pipeline(&pipeline, line);
+            /* This view borrows tokens; only the full list owns them. */
+            TokenList part = {
+                .items = tokens.items + item.token_start,
+                .count = item.token_count
+            };
+
+            const Token *first = &part.items[0];
+            const Token *last = &part.items[part.count - 1];
+            size_t text_end = last->position + strlen(last->raw_text);
+
+            char *command_text = strndup(
+                line + first->position, text_end - first->position
+            );
+
+            if (command_text == NULL) {
+                perror("msh: command text");
+                status = EXIT_FAILURE;
+                exit_warned = 0;
+                break;
             }
-        } else {
-            status = execute_pipeline(&pipeline, line);
+
+            /* Earlier commands may have changed status or variables. */
+            if (expand_tokens(&part, status,
+                              error, sizeof(error)) == -1) {
+                fprintf(stderr, "msh: %s\n", error);
+                free(command_text);
+                status = EXIT_FAILURE;
+                exit_warned = 0;
+                break;
+            }
+
+            Pipeline pipeline;
+
+            if (parse_pipeline(&part, &pipeline,
+                               error, sizeof(error)) == -1) {
+                fprintf(stderr, "msh: %s\n", error);
+                free(command_text);
+                status = 2;
+                exit_warned = 0;
+                break;
+            }
+
+            if (pipeline.command_count == 1 && !pipeline.background) {
+                BuiltinResult result =
+                    run_builtin_redirected(&pipeline.commands[0], status);
+
+                if (result.handled) {
+                    status = result.status;
+                    should_exit = result.should_exit;
+                } else {
+                    status = execute_pipeline(&pipeline, command_text);
+                }
+            } else {
+                status = execute_pipeline(&pipeline, command_text);
+            }
+
+            free_pipeline(&pipeline);
+            free(command_text);
+
+            if (should_exit) {
+                break;
+            }
+
+            /* A command between exit attempts cancels confirmation. */
+            exit_warned = 0;
         }
 
-        free_pipeline(&pipeline);
+        free_command_list(&list);
+        free_tokens(&tokens);
 
         if (should_exit) {
             if (interactive && jobs_have_active() && !exit_warned) {
@@ -142,8 +185,6 @@ int main(void)
 
             break;
         }
-
-        exit_warned = 0;
     }
 
     jobs_shutdown();
