@@ -70,7 +70,7 @@ make clean
 - Concurrent pipelines with multiple stages
 - Sequential command lists separated by semicolons
 - Conditional execution with && and ||
-- Background execution with a trailing &
+- Background pipelines separated by &, including a trailing &
 - Process-group foreground/background job management
 - Ctrl+C for foreground interruption and prompt cancellation
 - Ctrl+Z for stopping foreground jobs
@@ -177,11 +177,23 @@ A pipeline's last stage determines its status.
 The entire line is syntax-checked, including skipped items.
 A trailing && or || is rejected before any commands execute.
 
-For now, & is allowed only at the end of the entire input and requires
-an interactive terminal. It backgrounds only a final unconditional
-pipeline. Background logical chains such as true && sleep 1 & are
-rejected. A separate final job, such as true && echo done; sleep 1 &,
-is allowed. Background separators within lists are not implemented yet.
+An unquoted & backgrounds the preceding unconditional pipeline and
+allows the next list item to run immediately. Background execution
+currently requires an interactive terminal.
+
+Examples:
+- sleep 5 & echo started
+- sleep 5 & sleep 10 & echo both-started
+- echo hello | cat & echo continued
+
+Each background pipeline has its own job ID and command text.
+The following item starts unconditionally and may begin a logical chain.
+A trailing & is allowed. Leading &, repeated separated ampersands,
+and & immediately followed by a semicolon are syntax errors.
+
+Background logical chains such as true && sleep 1 & remain unsupported.
+A separate background job after a completed logical chain is allowed:
+true && echo done; sleep 1 & echo started.
 
 ## Variable expansion
 
@@ -419,7 +431,7 @@ The current implementation does not support:
 - Field splitting of expanded values
 - Wildcard expansion
 - Command substitution
-- Background separators within command lists
+- Background execution of entire logical chains
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
 - Bare or per-command assignments, loops, functions or a scripting language
@@ -460,7 +472,7 @@ make test
 This builds and runs lexer tests (including four semicolon and ten
 logical-operator assertions) and the existing pipeline parser tests, plus:
 
-- 33 command-list parser tests.
+- 45 command-list parser tests.
 
 - 12 job-state and resource-lifecycle checks.
 - 17 expansion unit tests.
@@ -469,7 +481,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 23 interactive job-control checks using a pseudo-terminal (PTY).
+- 39 interactive job-control checks using a pseudo-terminal (PTY).
 - 96 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics and 17 environment tests.
 
@@ -494,6 +506,9 @@ They use Python's standard library and require a usable PTY facility.
 The job-control PTY tests cover foreground terminal ownership,
 Ctrl+C interruption and status 130, Ctrl+Z stopping, bg/fg resumption,
 prompt input cancellation, terminal-mode restoration and normal exit.
+They also cover background separators, multiple background jobs,
+separate job records, continued foreground execution and selecting
+each background job with fg.
 They run automatically through make test using Python's standard library.
 
 The manual checks below remain useful for additional scenarios,
@@ -556,12 +571,17 @@ mixed logical chains, pipelines, environment changes and syntax errors
 freed all 510 allocations, reported zero memory errors, and left only
 three standard descriptors open.
 
+An interactive background-list Valgrind check covering multiple jobs,
+foreground continuation, completion, statistics and malformed input
+freed all 204 allocations, reported zero memory errors, and left
+only three standard descriptors open.
+
 These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
 The next priority is broader coverage of the base paper's shell behavior,
-including background lists, shell variables, parameter expansion,
+including background logical chains, shell variables, parameter expansion,
 scripts, control structures, grouping and command substitution.
 
 Further extensions such as persistent history, history recall,

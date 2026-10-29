@@ -239,33 +239,16 @@ int parse_command_list(const TokenList *tokens, CommandList *result,
         int separator = !at_end
             && (tokens->items[i].type == TOKEN_SEMI
                 || tokens->items[i].type == TOKEN_AND_IF
-                || tokens->items[i].type == TOKEN_OR_IF);
+                || tokens->items[i].type == TOKEN_OR_IF
+                || tokens->items[i].type == TOKEN_AMP);
 
         if (!at_end && !separator) {
-            if (tokens->items[i].type == TOKEN_AMP) {
-                if (i + 1 != tokens->count) {
-                    if (error_size > 0) {
-                        snprintf(error, error_size,
-                                 "'&' must end the input for now at position %zu",
-                                 tokens->items[i].position);
-                    }
-                    goto fail;
-                }
-
-                if (condition != LIST_ALWAYS) {
-                    if (error_size > 0) {
-                        snprintf(error, error_size,
-                                 "background logical chains are not supported");
-                    }
-                    goto fail;
-                }
-            }
             continue;
         }
 
         if (i == start) {
             if (at_end && condition == LIST_ALWAYS) {
-                /* Empty input or a single trailing semicolon. */
+                /* Empty input or a trailing semicolon/ampersand. */
                 break;
             }
 
@@ -285,10 +268,24 @@ int parse_command_list(const TokenList *tokens, CommandList *result,
             goto fail;
         }
 
+        int background = !at_end
+            && tokens->items[i].type == TOKEN_AMP;
+
+        if (background && condition != LIST_ALWAYS) {
+            if (error_size > 0) {
+                snprintf(error, error_size,
+                         "background logical chains are not supported");
+            }
+            goto fail;
+        }
+
+        /* Include '&' so parse_pipeline records background execution. */
+        size_t token_count = i - start + (background ? 1 : 0);
+
         /* Borrow this range; do not free its tokens. */
         TokenList part = {
             .items = tokens->items + start,
-            .count = i - start
+            .count = token_count
         };
         Pipeline pipeline;
 
@@ -312,7 +309,7 @@ int parse_command_list(const TokenList *tokens, CommandList *result,
         result->items = grown;
         result->items[result->count++] = (CommandListItem) {
             .token_start = start,
-            .token_count = i - start,
+            .token_count = token_count,
             .condition = condition
         };
 

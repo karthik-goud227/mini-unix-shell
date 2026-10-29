@@ -74,8 +74,34 @@ static void check(const char *name, const char *input,
                     }
                 }
 
+                int background =
+                    tokens.items[end - 1].type == TOKEN_AMP;
+
+                for (size_t j = item.token_start; j + 1 < end; j++) {
+                    if (tokens.items[j].type == TOKEN_AMP) {
+                        passed = 0;
+                    }
+                }
+
+                TokenList part = {
+                    .items = tokens.items + item.token_start,
+                    .count = item.token_count
+                };
+                Pipeline pipeline;
+                char pipeline_error[128];
+
+                if (parse_pipeline(&part, &pipeline, pipeline_error,
+                                   sizeof(pipeline_error)) == -1) {
+                    passed = 0;
+                } else {
+                    if (pipeline.background != background) {
+                        passed = 0;
+                    }
+                    free_pipeline(&pipeline);
+                }
+
                 next = end;
-                if (next < tokens.count) {
+                if (!background && next < tokens.count) {
                     TokenType type = tokens.items[next].type;
                     if (type != TOKEN_SEMI && type != TOKEN_AND_IF
                         && type != TOKEN_OR_IF) {
@@ -126,10 +152,10 @@ int main(void)
           "empty command in pipeline");
     check("missing redirection filename", "echo one >; echo two", 0,
           "expected filename after redirection");
-    check("background before separator rejected for now",
-          "sleep 1 &; echo two", 0, "'&' must end");
-    check("background before another command rejected for now",
-          "sleep 1 & echo two", 0, "'&' must end");
+    check("semicolon immediately after background rejected",
+          "sleep 1 &; echo two", 0, "empty command in list");
+    check("background before another command",
+          "sleep 1 & echo two", 2, NULL);
 
     check("AND condition", "true && echo yes", 2, NULL);
     check("OR condition", "false || echo recovered", 2, NULL);
@@ -166,6 +192,33 @@ int main(void)
     check("background OR chain rejected for now",
           "false || sleep 1 &", 0,
           "background logical chains are not supported");
+
+
+    check("background separator without spaces",
+          "sleep 1&echo ready", 2, NULL);
+    check("multiple background jobs",
+          "sleep 1 & sleep 2 & echo ready", 3, NULL);
+    check("multiple background jobs with trailing ampersand",
+          "sleep 1 & sleep 2 &", 2, NULL);
+    check("background pipeline followed by command",
+          "echo hello | cat & echo ready", 2, NULL);
+    check("logical chain after background separator",
+          "sleep 1 & false || echo recovered", 3, NULL);
+    check("quoted and escaped ampersands",
+          "echo '&' \"&\" \\&; echo done", 2, NULL);
+
+    check("leading ampersand", "& echo forbidden", 0,
+          "empty command in list");
+    check("ampersand alone", "&", 0,
+          "empty command in list");
+    check("separated repeated ampersands", "sleep 1 & & echo forbidden", 0,
+          "empty command in list");
+    check("AND immediately after background", "sleep 1 & && echo forbidden", 0,
+          "empty command in list");
+    check("missing filename before background", "echo hello > & echo next", 0,
+          "expected filename after redirection");
+    check("malformed pipeline after background", "sleep 1 & echo broken |", 0,
+          "empty command in pipeline");
 
     printf("\nTests: %d, failures: %d\n", total, failures);
     return failures ? 1 : 0;

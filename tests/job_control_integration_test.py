@@ -33,6 +33,7 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
 
     reaped = False
     foreground_group = None
+    background_groups = set()
 
     def send(text):
         data = text.encode()
@@ -246,6 +247,137 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
             and os.tcgetpgrp(terminal) == pid,
         )
 
+
+        # A background separator lets the next command run immediately.
+        output = command("sleep 300 & echo BACKGROUND_LIST_READY")
+        launch = re.search(r"^\[(\d+)\]\s+(\d+)\s*$", output, re.MULTILINE)
+
+        if launch is not None:
+            background_id = launch.group(1)
+            foreground_group = int(launch.group(2))
+
+        check("background list launches a job", launch is not None)
+        if launch is None:
+            raise RuntimeError(f"Missing background launch: {output!r}")
+
+        check(
+            "foreground command runs after background separator",
+            "\nBACKGROUND_LIST_READY\n" in output,
+        )
+        check(
+            "shell owns terminal after background list",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        output = command("jobs")
+        check(
+            "background job retains only its own command text",
+            re.search(
+                rf"^\[{background_id}\]\s+Running\s+sleep 300 &$",
+                output,
+                re.MULTILINE,
+            ) is not None,
+        )
+
+        send(f"fg %{background_id}\n")
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if os.tcgetpgrp(terminal) == foreground_group:
+                break
+            time.sleep(0.02)
+
+        handed_back = os.tcgetpgrp(terminal) == foreground_group
+        check("fg foregrounds the background-list job", handed_back)
+        if not handed_back:
+            raise RuntimeError("Background-list fg handoff timed out")
+
+        send("\x03")
+        read_until(b"msh> ")
+
+        output = command("echo $?")
+        check(
+            "interrupted background-list job returns status 130",
+            "\n130\n" in output,
+        )
+
+        output = command("jobs")
+        check(
+            "interrupted background-list job is removed",
+            output.strip() == "jobs\nmsh>",
+        )
+
+
+        output = command(
+            "sleep 300 & sleep 301 & echo MULTI_BACKGROUND_READY"
+        )
+        launches = re.findall(
+            r"^\[(\d+)\]\s+(\d+)\s*$", output, re.MULTILINE
+        )
+        background_groups.update(int(group) for _, group in launches)
+
+        distinct = (
+            len(launches) == 2
+            and len({job for job, _ in launches}) == 2
+            and len({group for _, group in launches}) == 2
+        )
+        check("multiple background jobs have distinct IDs and groups", distinct)
+        if not distinct:
+            raise RuntimeError(f"Expected two background jobs: {output!r}")
+
+        check(
+            "foreground command runs after two background jobs",
+            "\nMULTI_BACKGROUND_READY\n" in output,
+        )
+        check(
+            "shell owns terminal after multiple background launches",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        output = command("jobs")
+        check(
+            "jobs lists both background commands separately",
+            all(
+                re.search(
+                    rf"^\[{job_id}\]\s+Running\s+sleep {duration} &$",
+                    output,
+                    re.MULTILINE,
+                ) is not None
+                for (job_id, _), duration in zip(launches, (300, 301))
+            ),
+        )
+
+        for index, (job_id, group) in enumerate(launches, 1):
+            foreground_group = int(group)
+            send(f"fg %{job_id}\n")
+            deadline = time.monotonic() + 10
+
+            while time.monotonic() < deadline:
+                if os.tcgetpgrp(terminal) == foreground_group:
+                    break
+                time.sleep(0.02)
+
+            handed_back = os.tcgetpgrp(terminal) == foreground_group
+            check(f"fg selects background job {index}", handed_back)
+            if not handed_back:
+                raise RuntimeError("Multiple-job fg handoff timed out")
+
+            send("\x03")
+            read_until(b"msh> ")
+
+            output = command("echo $?")
+            check(
+                f"background job {index} interruption returns 130",
+                "\n130\n" in output,
+            )
+            background_groups.discard(foreground_group)
+            foreground_group = None
+
+        output = command("jobs")
+        check(
+            "both interrupted background jobs are removed",
+            output.strip() == "jobs\nmsh>",
+        )
+
         send("exit 0\n")
         deadline = time.monotonic() + 10
 
@@ -266,6 +398,13 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
         failures += 1
         print(f"FAIL: test execution: {error}")
     finally:
+        for group in background_groups:
+            if group > 0 and group != pid:
+                try:
+                    os.killpg(group, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
         if not reaped:
             # Clean up the test job if an assertion or timeout interrupted us.
             if foreground_group is not None and foreground_group > 0:
