@@ -240,6 +240,10 @@ static int chain_execute_pipeline(const Pipeline *pipeline,
     for (size_t i = 0; i < count; i++) {
         const Command *command = &pipeline->commands[i];
 
+        if (command->argc == 0 && command->assignment_count > 0) {
+            continue;
+        }
+
         if (command->argc == 0 || command->argv[0][0] == '\0') {
             fprintf(stderr, "msh: empty command name\n");
             return 127;
@@ -453,8 +457,7 @@ static int chain_evaluate(const TokenList *tokens,
         for (size_t stage = 0; stage < pipeline.command_count; stage++) {
             const Command *command = &pipeline.commands[stage];
             if (command->assignment_count > 0
-                && ((command->argc == 0 && pipeline.command_count != 1)
-                    || (command->argc > 0 && is_builtin(command)))) {
+                && command->argc > 0 && is_builtin(command)) {
                 unsupported_assignment = 1;
             }
         }

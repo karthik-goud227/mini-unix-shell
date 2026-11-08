@@ -72,6 +72,10 @@ _Noreturn void execute_child_command(const Command *command,
         }
     }
 
+    if (command->argc == 0 && command->assignment_count > 0) {
+        _exit(0);
+    }
+
     if (is_builtin(command)) {
         BuiltinResult result = run_builtin(command, last_status);
         _exit(fflush(stdout) == EOF ? 1 : result.status);
@@ -168,6 +172,10 @@ int execute_pipeline(const Pipeline *pipeline,
 
     for (size_t i = 0; i < count; i++) {
         const Command *command = &pipeline->commands[i];
+
+        if (command->argc == 0 && command->assignment_count > 0) {
+            continue;
+        }
 
         if (command->argc == 0 || command->argv[0][0] == '\0') {
             fprintf(stderr, "msh: empty command name\n");

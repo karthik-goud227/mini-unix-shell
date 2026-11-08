@@ -292,10 +292,11 @@ word such as 'NAME=value' is ordinary command text.
 
 Redirection is supported. If redirection setup fails, no assignments
 from that command are applied. If a later assignment fails after earlier
-ones succeed, those earlier changes remain. Successful assignment-only
-commands return 0 and do not create a job.
+ones succeed, those earlier changes remain. Successful standalone foreground
+assignment-only commands return 0 and do not create a job.
 
-Assignments without a command update the parent shell. Assignment prefixes
+Standalone foreground assignments without a command update the parent shell.
+Assignment prefixes
 before an external command or pipeline stage apply only in that
 command's child, for both foreground and background execution:
 
@@ -342,9 +343,22 @@ This prints temporary followed by supervisor. Skipped assignments have no
 effect, and assignment values expand using the supervisor's current
 variables and previous status.
 
-Assignment prefixes before built-ins remain unsupported. Assignment-only
-pipeline stages and standalone assignment-only background jobs remain
-unsupported.
+Assignment-only pipeline stages run in separate children. Their assignments
+do not change the parent shell, sibling stages or a chain supervisor.
+A successful assignment-only stage returns 0 and produces no output.
+Redirections still apply, and redirection failure returns 1. The final
+stage determines the pipeline status.
+
+For example:
+
+    MSH_DEMO=child | cat
+    false | MSH_DEMO=child
+
+The second pipeline returns 0 because its final assignment-only stage
+succeeds. Pipeline stages are tracked as part of the pipeline job.
+
+Assignment prefixes before built-ins and standalone assignment-only
+background jobs remain unsupported.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -558,7 +572,7 @@ The current implementation does not support:
 - Here-documents or arbitrary file-descriptor redirection
 - Assignment prefixes before built-ins
 - Loops, functions or a scripting language
-- Assignment-only pipeline stages or standalone assignment-only background jobs
+- Standalone assignment-only background jobs
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
@@ -606,7 +620,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 job-state and resource-lifecycle checks.
 - 6 fork-isolation checks for inherited job records.
 - 8 chain-wait checks, 3 stop/resume checks and 9 token-copy checks.
-- 10 chain-pipeline checks and 20 chain-evaluation checks.
+- 10 chain-pipeline checks and 23 chain-evaluation checks.
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
 - 17 expansion unit tests.
@@ -621,9 +635,9 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 71 interactive job-control checks using a pseudo-terminal (PTY).
-- 136 non-interactive whole-shell integration tests: 24 general,
+- 141 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
-  14 standalone shell-variable and 19 command-prefix tests.
+  14 standalone shell-variable and 24 command-prefix/assignment-stage tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -774,3 +788,9 @@ external prefixes, parent-value preservation and completed-job cleanup
 freed all 256 allocations, reported zero memory errors, and left only
 three standard descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.
+
+An assignment-stage Valgrind run covering child isolation, pipeline
+statuses and failed redirection freed all 440 allocations, reported zero
+memory errors, and left only three standard descriptors open.
+Child reports were suppressed with --child-silent-after-fork=yes;
+these figures describe the parent shell.

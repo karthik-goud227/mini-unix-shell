@@ -141,5 +141,31 @@ check("prefixed final stage determines failure status",
 check("prefixed earlier failure allows final success",
       "MSH_PREFIX_TEST=temporary false | cat\nexit\n")
 
+
+check("assignment-only first stage preserves parent",
+      'MSH_PREFIX_TEST=parent\n'
+      'MSH_PREFIX_TEST=child | cat\n'
+      'echo "$MSH_PREFIX_TEST"\nexit\n',
+      "parent\n")
+
+check("assignment-only final stage determines success",
+      "false | MSH_PREFIX_TEST=child\nexit\n")
+
+check("assignment-only earlier stage preserves final failure",
+      "MSH_PREFIX_TEST=child | false\nexit\n",
+      expected_status=1)
+
+check("assignment-only stage redirection creates empty file",
+      'MSH_PREFIX_TEST=parent\n'
+      'MSH_PREFIX_TEST=child > stage-output | cat\n'
+      'cat stage-output\n'
+      'echo "$MSH_PREFIX_TEST"\nexit\n',
+      "parent\n")
+
+check("failed final assignment-stage redirection returns failure",
+      "true | MSH_PREFIX_TEST=child < missing-stage-input\nexit\n",
+      expected_status=1,
+      error="missing-stage-input")
+
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

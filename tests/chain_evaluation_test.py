@@ -133,6 +133,19 @@ cases.extend([
      "left:right\nparent\n", 0),
 ])
 
+
+cases.extend([
+    ("assignment-only first stage preserves supervisor",
+     'MSH_CHAIN_VALUE=child | cat && echo "$MSH_CHAIN_VALUE"',
+     "parent\n", 0),
+    ("assignment-only final stage returns success",
+     'false | MSH_CHAIN_VALUE=child && echo "$MSH_CHAIN_VALUE"',
+     "parent\n", 0),
+    ("assignment-only earlier stage preserves final failure",
+     "MSH_CHAIN_VALUE=child | false",
+     "", 1),
+])
+
 failures = 0
 
 with tempfile.TemporaryDirectory(prefix="msh-chain-evaluation-") as directory:
