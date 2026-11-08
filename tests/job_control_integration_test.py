@@ -643,6 +643,48 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
             "\n1\n" in output,
         )
 
+        command("unset MSH_BG_ONLY_TEST")
+        command("MSH_BG_ONLY_TEST=parent")
+        output = command(
+            "MSH_BG_ONLY_TEST=child > bg-only-output &"
+        )
+
+        launch = re.search(r"\[(\d+)\]\s+(\d+)", output)
+        check("assignment-only background job launches", launch is not None)
+        if launch is None:
+            raise RuntimeError(f"Missing assignment-only job: {output!r}")
+        background_groups.add(int(launch.group(2)))
+
+        check(
+            "assignment-only background job preserves terminal ownership",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        result_path = Path(workdir) / "bg-only-output"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if result_path.exists():
+                break
+            time.sleep(0.02)
+
+        check(
+            "assignment-only background redirection creates empty file",
+            result_path.exists() and result_path.read_bytes() == b"",
+        )
+
+        output = command('echo "$MSH_BG_ONLY_TEST"')
+        check(
+            "assignment-only background job preserves parent value",
+            "\nparent\n" in output,
+        )
+
+        command("printenv MSH_BG_ONLY_TEST")
+        output = command("echo $?")
+        check(
+            "assignment-only background job preserves parent export state",
+            "\n1\n" in output,
+        )
+
         send("exit 0\n")
         deadline = time.monotonic() + 10
 

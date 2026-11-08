@@ -357,8 +357,16 @@ For example:
 The second pipeline returns 0 because its final assignment-only stage
 succeeds. Pipeline stages are tracked as part of the pipeline job.
 
-Assignment prefixes before built-ins and standalone assignment-only
-background jobs remain unsupported.
+Standalone assignment-only background jobs are supported:
+
+    MSH_DEMO=child > assignment-output &
+
+Assignments run in a child and leave the parent values and export state
+unchanged. Redirections apply normally; the example creates an empty
+output file. The shell tracks and reaps the child as a background job.
+Background execution requires an interactive terminal.
+
+Assignment prefixes before built-ins remain unsupported.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -572,7 +580,6 @@ The current implementation does not support:
 - Here-documents or arbitrary file-descriptor redirection
 - Assignment prefixes before built-ins
 - Loops, functions or a scripting language
-- Standalone assignment-only background jobs
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
@@ -634,7 +641,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 71 interactive job-control checks using a pseudo-terminal (PTY).
+- 76 interactive job-control checks using a pseudo-terminal (PTY).
 - 141 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable and 24 command-prefix/assignment-stage tests.
@@ -794,3 +801,9 @@ statuses and failed redirection freed all 440 allocations, reported zero
 memory errors, and left only three standard descriptors open.
 Child reports were suppressed with --child-silent-after-fork=yes;
 these figures describe the parent shell.
+
+A background assignment-only Valgrind run covering parent-value
+preservation, empty output redirection and completed-job cleanup freed
+all 275 allocations, reported zero memory errors, and left only three
+standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.

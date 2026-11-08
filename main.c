@@ -193,10 +193,7 @@ int main(void)
             for (size_t stage = 0; stage < pipeline.command_count; stage++) {
                 const Command *command = &pipeline.commands[stage];
                 if (command->assignment_count > 0
-                    && ((command->argc == 0
-                         && pipeline.command_count == 1
-                         && pipeline.background)
-                        || (command->argc > 0 && is_builtin(command)))) {
+                    && command->argc > 0 && is_builtin(command)) {
                     unsupported_assignment = 1;
                 }
             }
