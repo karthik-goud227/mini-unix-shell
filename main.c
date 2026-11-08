@@ -193,9 +193,9 @@ int main(void)
             for (size_t stage = 0; stage < pipeline.command_count; stage++) {
                 const Command *command = &pipeline.commands[stage];
                 if (command->assignment_count > 0
-                    && (pipeline.background
-                        || (command->argc == 0
-                            && pipeline.command_count != 1)
+                    && ((command->argc == 0
+                         && (pipeline.command_count != 1
+                             || pipeline.background))
                         || (command->argc > 0 && is_builtin(command)))) {
                     unsupported_assignment = 1;
                 }
@@ -204,7 +204,7 @@ int main(void)
             if (unsupported_assignment) {
                 fprintf(stderr,
                         "msh: assignments require a standalone foreground "
-                        "assignment-only command or a foreground external "
+                        "assignment-only command or an external "
                         "command/pipeline stage\n");
                 free_pipeline(&pipeline);
                 free(command_text);

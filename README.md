@@ -262,8 +262,9 @@ the last executed item; skipped items leave that status unchanged.
 Only `$NAME` and `$?` are supported. Braced expansion such as `${HOME}`,
 positional parameters such as `$1`, and special parameters such as `$$`
 are not implemented. Standalone foreground assignments such as
-NAME=value are supported. Temporary assignments before a standalone
-foreground external command are also supported: NAME=value command.
+NAME=value are supported. Temporary assignment prefixes are supported
+on external commands and pipeline stages, in foreground or background
+execution: NAME=value command.
 
 ## Local shell variables
 
@@ -295,8 +296,8 @@ ones succeed, those earlier changes remain. Successful assignment-only
 commands return 0 and do not create a job.
 
 Assignments without a command update the parent shell. Assignment prefixes
-before a foreground external command or pipeline stage apply only
-in that command's child:
+before an external command or pipeline stage apply only in that
+command's child, for both foreground and background execution:
 
     MSH_DEMO=parent
     MSH_DEMO=temporary printenv MSH_DEMO
@@ -314,7 +315,7 @@ values before temporary assignments are applied. Redirections are applied
 before the child assignments; a failed redirection prevents execution.
 Skipped commands do not apply their prefixes.
 
-Each external stage of a foreground pipeline can have its own prefixes:
+Each external stage of a foreground or background pipeline can have its own prefixes:
 
     MSH_DEMO=left printenv MSH_DEMO | cat
     printf 'input\n' | MSH_DEMO=right printenv MSH_DEMO
@@ -323,9 +324,14 @@ Each stage receives its own temporary values. A stage's prefixes do not
 change sibling stages or the parent shell. The final stage determines
 the pipeline status.
 
-Assignment prefixes before built-ins and background commands remain
-unsupported. Assignment-only execution inside pipelines or background
-jobs/chains also remains unsupported.
+Background external commands and pipelines support the same temporary
+prefix isolation and require an interactive terminal. For example:
+
+    MSH_DEMO=temporary printenv MSH_DEMO > demo-output &
+
+Assignment prefixes before built-ins remain unsupported. Assignment-only
+execution inside pipelines or background jobs remains unsupported.
+Assignments inside background logical chains are not supported yet.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -537,7 +543,7 @@ The current implementation does not support:
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Assignment prefixes before built-ins or background commands
+- Assignment prefixes before built-ins or inside background logical chains
 - Loops, functions or a scripting language
 - Bare assignment execution inside pipelines or background jobs/chains
 - Persistent history, history recall, arrow-key navigation or autocomplete
@@ -601,7 +607,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 60 interactive job-control checks using a pseudo-terminal (PTY).
+- 66 interactive job-control checks using a pseudo-terminal (PTY).
 - 136 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable and 19 command-prefix tests.
@@ -743,3 +749,9 @@ preservation, pipeline statuses and failed redirection freed all 647
 allocations, reported zero memory errors, and left only three standard
 descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.
+
+A background-assignment Valgrind run covering stage isolation, parent-value
+preservation and completed-job cleanup freed all 403 allocations, reported
+zero memory errors, and left only three standard descriptors open.
+Child reports were suppressed with --child-silent-after-fork=yes;
+these figures describe the parent shell.

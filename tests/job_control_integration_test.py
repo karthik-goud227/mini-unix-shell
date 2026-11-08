@@ -541,6 +541,59 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
         )
         foreground_group = None
 
+        # Temporary assignments belong to individual background children.
+        command("unset MSH_BG_ASSIGN_TEST")
+        command("MSH_BG_ASSIGN_TEST=parent")
+        output = command(
+            "MSH_BG_ASSIGN_TEST=left printenv MSH_BG_ASSIGN_TEST | "
+            "MSH_BG_ASSIGN_TEST=right sh -c "
+            "'read line; printf \"%s:%s\\n\" \"$line\" \"$MSH_BG_ASSIGN_TEST\"' "
+            "> bg-assignment-output &"
+        )
+
+        launch = re.search(r"\[(\d+)\]\s+(\d+)", output)
+        check("prefixed background pipeline launches", launch is not None)
+        if launch is None:
+            raise RuntimeError(f"Missing background assignment job: {output!r}")
+        background_groups.add(int(launch.group(2)))
+
+        check(
+            "prefixed background pipeline preserves shell terminal ownership",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        result_path = Path(workdir) / "bg-assignment-output"
+        deadline = time.monotonic() + 10
+        contents = ""
+        while time.monotonic() < deadline:
+            if result_path.exists():
+                contents = result_path.read_text()
+                if contents == "left:right\n":
+                    break
+            time.sleep(0.02)
+
+        check(
+            "background stages receive independent assignment values",
+            contents == "left:right\n",
+        )
+
+        output = command('echo "$MSH_BG_ASSIGN_TEST"')
+        check(
+            "background prefixes preserve parent local value",
+            "\nparent\n" in output,
+        )
+
+        output = command("printenv MSH_BG_ASSIGN_TEST")
+        check(
+            "background prefixes do not export parent local variable",
+            "\nparent\n" not in output,
+        )
+        output = command("echo $?")
+        check(
+            "parent environment lookup remains absent",
+            "\n1\n" in output,
+        )
+
         send("exit 0\n")
         deadline = time.monotonic() + 10
 

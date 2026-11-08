@@ -112,7 +112,7 @@ check("skipped prefix command has no effect",
 check("built-in prefix rejected for now",
       "MSH_PREFIX_TEST=temporary pwd\nexit\n",
       expected_status=2,
-      error="assignments require a standalone foreground assignment-only command or a foreground external")
+      error="assignments require a standalone foreground assignment-only command or an external")
 
 check("pipeline prefix enters stage environment",
       "MSH_PREFIX_TEST=temporary printenv MSH_PREFIX_TEST | cat\nexit\n",
