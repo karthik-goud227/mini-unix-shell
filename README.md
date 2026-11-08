@@ -262,8 +262,8 @@ the last executed item; skipped items leave that status unchanged.
 Only `$NAME` and `$?` are supported. Braced expansion such as `${HOME}`,
 positional parameters such as `$1`, and special parameters such as `$$`
 are not implemented. Standalone foreground assignments such as
-NAME=value are supported. Per-command assignments such as
-NAME=value command remain unsupported.
+NAME=value are supported. Temporary assignments before a standalone
+foreground external command are also supported: NAME=value command.
 
 ## Local shell variables
 
@@ -294,9 +294,28 @@ from that command are applied. If a later assignment fails after earlier
 ones succeed, those earlier changes remain. Successful assignment-only
 commands return 0 and do not create a job.
 
-For now, assignment execution is limited to standalone foreground
-assignment-only commands. Command prefixes such as NAME=value command,
-pipeline assignments and background assignments remain unsupported.
+Assignments without a command update the parent shell. Assignment prefixes
+before a standalone foreground external command apply only in its child:
+
+    MSH_DEMO=parent
+    MSH_DEMO=temporary printenv MSH_DEMO
+    echo "$MSH_DEMO"
+
+The external command prints temporary; the final echo prints parent.
+Prefix values are exported to that command, even when the parent variable
+is local. Existing parent values and export status remain unchanged.
+Multiple prefixes apply from left to right, so later assignment values
+can reference earlier ones. Assignment values can expand the preceding
+command's status through $?.
+
+Ordinary arguments and redirection paths expand using the parent shell's
+values before temporary assignments are applied. Redirections are applied
+before the child assignments; a failed redirection prevents execution.
+Skipped commands do not apply their prefixes.
+
+Assignment prefixes before built-ins, pipeline stages and background
+commands remain unsupported. Assignment-only execution inside pipelines
+or background jobs/chains also remains unsupported.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -508,7 +527,8 @@ The current implementation does not support:
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Per-command assignments, loops, functions or a scripting language
+- Assignment prefixes before built-ins, pipelines or background commands
+- Loops, functions or a scripting language
 - Bare assignment execution inside pipelines or background jobs/chains
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
@@ -572,9 +592,9 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 60 interactive job-control checks using a pseudo-terminal (PTY).
-- 117 non-interactive whole-shell integration tests: 24 general,
-  34 command-list, 11 expansion, 10 statistics, 24 environment
-  and 14 standalone shell-variable tests.
+- 132 non-interactive whole-shell integration tests: 24 general,
+  34 command-list, 11 expansion, 10 statistics, 24 environment,
+  14 standalone shell-variable and 15 command-prefix tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -701,3 +721,9 @@ until that work is complete.
 
 Each extension should define its behavior, update the relevant module
 interfaces and preserve the existing regression tests.
+
+A command-prefix Valgrind run covering temporary values, parent-value
+preservation, ordered prefixes, status expansion and failed redirection
+freed all 663 allocations, reported zero memory errors, and left only
+three standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.

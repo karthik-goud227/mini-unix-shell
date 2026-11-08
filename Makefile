@@ -19,6 +19,7 @@ parser.o: parser.c parser.h lexer.h assignment.h
 assignment.o: assignment.c assignment.h
 assignment_exec.o: assignment_exec.c assignment.h expansion.h variables.h lexer.h
 builtins.o: assignment.h
+executor.o: assignment.h
 executor.o: executor.c executor.h builtins.h job_control.h jobs.h redirection.h terminal.h parser.h lexer.h signals.h
 builtins.o: builtins.c builtins.h redirection.h parser.h lexer.h jobs.h terminal.h job_control.h
 redirection.o: redirection.c redirection.h parser.h lexer.h
@@ -107,6 +108,7 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	python3 tests/statistics_integration_test.py
 	python3 tests/environment_integration_test.py
 	python3 tests/shell_variables_integration_test.py
+	python3 tests/command_prefix_integration_test.py
 	python3 tests/history_test.py
 	python3 tests/history_integration_test.py
 	python3 tests/job_control_integration_test.py

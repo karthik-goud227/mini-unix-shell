@@ -193,17 +193,17 @@ int main(void)
             for (size_t stage = 0; stage < pipeline.command_count; stage++) {
                 const Command *command = &pipeline.commands[stage];
                 if (command->assignment_count > 0
-                    && (command->argc > 0
-                        || pipeline.command_count != 1
-                        || pipeline.background)) {
+                    && (pipeline.command_count != 1
+                        || pipeline.background
+                        || (command->argc > 0 && is_builtin(command)))) {
                     unsupported_assignment = 1;
                 }
             }
 
             if (unsupported_assignment) {
                 fprintf(stderr,
-                        "msh: assignments currently require a standalone "
-                        "foreground assignment-only command\n");
+                        "msh: assignments require a standalone foreground "
+                        "assignment-only or external command\n");
                 free_pipeline(&pipeline);
                 free(command_text);
                 status = 2;
@@ -219,10 +219,10 @@ int main(void)
                     status = result.status;
                     should_exit = result.should_exit;
                 } else {
-                    status = execute_pipeline(&pipeline, command_text);
+                    status = execute_pipeline(&pipeline, command_text, status);
                 }
             } else {
-                status = execute_pipeline(&pipeline, command_text);
+                status = execute_pipeline(&pipeline, command_text, status);
             }
 
             free_pipeline(&pipeline);

@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "executor.h"
+#include "assignment.h"
 #include "builtins.h"
 #include "job_control.h"
 #include "jobs.h"
@@ -60,6 +61,17 @@ _Noreturn void execute_child_command(const Command *command,
         _exit(1);
     }
 
+    if (command->assignment_count > 0) {
+        char error[128];
+        if (assignments_apply(command->assignments,
+                              command->assignment_count,
+                              1, last_status,
+                              error, sizeof(error)) == -1) {
+            fprintf(stderr, "msh: %s\n", error);
+            _exit(1);
+        }
+    }
+
     if (is_builtin(command)) {
         BuiltinResult result = run_builtin(command, last_status);
         _exit(fflush(stdout) == EOF ? 1 : result.status);
@@ -79,7 +91,8 @@ _Noreturn void execute_child_command(const Command *command,
 static void run_child(const Pipeline *pipeline, size_t index,
                       int pipes[][2], size_t pipe_count,
                       int gate[2], pid_t pgid,
-                      const sigset_t *original_mask)
+                      const sigset_t *original_mask,
+                      int last_status)
 {
     close(gate[1]);
     signals_close();
@@ -129,11 +142,11 @@ static void run_child(const Pipeline *pipeline, size_t index,
 
     close_pipes(pipes, pipe_count);
 
-    execute_child_command(&pipeline->commands[index], 0);
+    execute_child_command(&pipeline->commands[index], last_status);
 }
 
 int execute_pipeline(const Pipeline *pipeline,
-                     const char *command_text)
+                     const char *command_text, int last_status)
 {
     size_t count = pipeline->command_count;
 
@@ -227,7 +240,7 @@ int execute_pipeline(const Pipeline *pipeline,
 
         if (child == 0) {
             run_child(pipeline, i, pipes, pipe_count,
-                      gate, job->pgid, &original_mask);
+                      gate, job->pgid, &original_mask, last_status);
             _exit(1);
         }
 

@@ -4,7 +4,7 @@
 #include "parser.h"
 
 int execute_pipeline(const Pipeline *pipeline,
-                     const char *command_text);
+                     const char *command_text, int last_status);
 
 /*
  * Child-only: apply redirections and execute one command.
