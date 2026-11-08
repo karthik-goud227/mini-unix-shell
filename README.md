@@ -71,6 +71,7 @@ make clean
 - Sequential command lists separated by semicolons
 - Conditional execution with && and ||
 - Background pipelines separated by &, including a trailing &
+- Background logical chains managed as one job
 - Process-group foreground/background job management
 - Ctrl+C for foreground interruption and prompt cancellation
 - Ctrl+Z for stopping foreground jobs
@@ -119,7 +120,14 @@ among the jobs currently listed.
 - `bg %N`: resumes job N without giving it the terminal.
 
 All built-ins run in the parent for standalone foreground commands.
-Only pwd is permitted inside pipelines or background jobs.
+Only pwd is permitted inside ordinary pipelines or single-command
+background jobs.
+
+Inside a multi-item background logical chain, standalone cd, pwd,
+export, unset and exit run in the supervisor. Directory and environment
+changes affect only that supervisor and its future children.
+exit ends the chain. Only pwd is permitted in multi-stage pipelines.
+jobs, fg, bg, stats and history are rejected inside the chain.
 Redirection is supported for cd, pwd, exit, jobs, stats, export,
 unset and history.
 Redirection on fg and bg is deliberately rejected.
@@ -158,8 +166,9 @@ existing interactive confirmation warning still applies, and the rest
 of that line is skipped. Invalid exit arguments report an error and allow
 the next item to run.
 
-History records the whole submitted line as one entry. Job records and
-stats use each pipeline's own original command text.
+History records the whole submitted line as one entry. Ordinary jobs
+use each pipeline's original command text. A background logical-chain
+job uses the original text of the whole chain.
 
 Logical operators control whether the next pipeline executes:
 
@@ -191,9 +200,21 @@ The following item starts unconditionally and may begin a logical chain.
 A trailing & is allowed. Leading &, repeated separated ampersands,
 and & immediately followed by a semicolon are syntax errors.
 
-Background logical chains such as true && sleep 1 & remain unsupported.
-A separate background job after a completed logical chain is allowed:
-true && echo done; sleep 1 & echo started.
+An & after a logical chain backgrounds the entire chain.
+For example: sleep 2 && echo finished & echo started
+
+The parent continues immediately. One supervisor evaluates the chain.
+Its pipeline stages share one process group, and the parent tracks
+the whole chain as one job with its original command text.
+
+The supervisor applies logical conditions and expands each executed
+pipeline using its own environment and previous status.
+Skipped pipelines do not expand words or apply redirections.
+
+fg and bg operate on the whole chain. Ctrl+Z stops it. Ctrl+C after
+fg interrupts it without executing the remaining chain commands.
+Successful launch returns 0; fg returns the chain's eventual status.
+Background execution requires an interactive terminal.
 
 ## Variable expansion
 
@@ -273,8 +294,11 @@ export MSH_DEMO="$MSH_DEMO world"
 
 The second assignment uses the previous value and stores "hello world".
 
-Both commands run in the parent shell and work interactively or through
-non-interactive input. They are rejected in pipelines and background jobs.
+Both commands run in the parent for standalone foreground use and work
+interactively or through non-interactive input. They are rejected in
+ordinary pipelines and single-command background jobs. Standalone use
+inside a multi-item background logical chain changes only the
+supervisor's environment.
 Redirection is supported; if redirection setup fails, the environment
 change is not performed.
 
@@ -363,6 +387,13 @@ the sum of process peaks or the simultaneous peak memory of a pipeline.
 Measurements follow Linux wait4 accounting and are not a live memory
 monitor or a process-tree profiler.
 
+For a background logical chain, the parent measures the supervisor
+as one tracked process. Linux accounting can include children that
+the supervisor has waited for. A displayed process count of 1/1
+therefore describes the supervisor record, not the number of commands
+or pipeline stages executed. These entries do not provide separate
+per-stage measurements.
+
 The shell collects resource usage with wait4 and saves final measurements
 only on termination. Stops and continued events do not finalize usage.
 Completed summaries are archived when their job records are removed;
@@ -383,7 +414,9 @@ launches may also be archived; a history entry does not imply success.
 
 ## Signals and job lifecycle
 
-One pipeline is one job, with one process record per stage.
+An ordinary pipeline is one job, with one process record per stage.
+A background logical chain is one job represented by its supervisor.
+The supervisor launches and reaps the chain's pipeline stages.
 
 At the prompt, the shell owns the terminal. A foreground job receives
 terminal ownership until it finishes or stops. Children restore default
@@ -431,7 +464,6 @@ The current implementation does not support:
 - Field splitting of expanded values
 - Wildcard expansion
 - Command substitution
-- Background execution of entire logical chains
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
 - Bare or per-command assignments, loops, functions or a scripting language
@@ -457,6 +489,7 @@ A normal exit with numeric status 130 does not trigger this newline.
 | expansion.c | Quote-aware environment and previous-status expansion |
 | parser.c | Command-list validation, token ranges, pipelines and redirections |
 | executor.c | Pipes, fork/exec, grouping and launch synchronization |
+| chain.c | Background-chain supervisor, evaluation and pipeline lifecycle |
 | builtins.c | Parent built-ins and descriptor restoration |
 | redirection.c | File opening and standard-stream replacement |
 | terminal.c | Terminal ownership, modes and child signal defaults |
@@ -476,13 +509,18 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 45 command-list parser tests.
 
 - 12 job-state and resource-lifecycle checks.
+- 6 fork-isolation checks for inherited job records.
+- 8 chain-wait checks, 3 stop/resume checks and 9 token-copy checks.
+- 10 chain-pipeline checks and 14 chain-evaluation checks.
+- 6 chain-interruption checks.
+- 6 supervisor-launch checks plus a parent-continuation assertion.
 - 17 expansion unit tests.
 - 9 resource-recorder checks.
 - 5 actual resource-collection checks.
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 40 interactive job-control checks using a pseudo-terminal (PTY).
+- 60 interactive job-control checks using a pseudo-terminal (PTY).
 - 96 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics and 17 environment tests.
 
@@ -510,6 +548,8 @@ prompt input cancellation, terminal-mode restoration and normal exit.
 They also cover background separators, multiple background jobs,
 separate job records, continued foreground execution and selecting
 each background job with fg.
+Logical-chain checks cover whole-chain job records, foreground
+handoff, interruption, stop/resume, status 130 and job removal.
 They run automatically through make test using Python's standard library.
 
 The manual checks below remain useful for additional scenarios,
@@ -577,12 +617,19 @@ foreground continuation, completion, statistics and malformed input
 freed all 204 allocations, reported zero memory errors, and left
 only three standard descriptors open.
 
+An interactive background-chain Valgrind run covering successful
+completion, short-circuit fallback, foreground continuation and job
+removal freed all 304 allocations, reported zero memory errors,
+and left only three standard descriptors open. Child diagnostics
+were suppressed by --child-silent-after-fork=yes, so this result
+describes the parent shell's reported memory and descriptor state.
+
 These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
 The next priority is broader coverage of the base paper's shell behavior,
-including background logical chains, shell variables, parameter expansion,
+including shell variables, parameter expansion,
 scripts, control structures, grouping and command substitution.
 
 Further extensions such as persistent history, history recall,

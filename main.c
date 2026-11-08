@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "builtins.h"
+#include "chain.h"
 #include "executor.h"
 #include "expansion.h"
 #include "input.h"
@@ -103,6 +104,42 @@ int main(void)
 
         for (size_t i = 0; i < list.count; i++) {
             CommandListItem item = list.items[i];
+
+            /*
+             * Launch a background logical chain before evaluating
+             * any of its conditions or expanding any of its words.
+             */
+            size_t chain_end = command_list_chain_end(&list, i);
+            const CommandListItem *last_item = &list.items[chain_end - 1];
+            const Token *chain_last = &tokens.items[
+                last_item->token_start + last_item->token_count - 1
+            ];
+
+            if (chain_end > i + 1 && chain_last->type == TOKEN_AMP) {
+                const Token *chain_first = &tokens.items[item.token_start];
+                size_t text_end = chain_last->position
+                    + strlen(chain_last->raw_text);
+
+                char *chain_text = strndup(
+                    line + chain_first->position,
+                    text_end - chain_first->position
+                );
+
+                if (chain_text == NULL) {
+                    perror("msh: chain command text");
+                    status = EXIT_FAILURE;
+                    exit_warned = 0;
+                    break;
+                }
+
+                status = execute_background_chain(
+                    &tokens, &list, i, chain_end, status, chain_text
+                );
+                free(chain_text);
+                i = chain_end - 1;
+                exit_warned = 0;
+                continue;
+            }
 
             if ((item.condition == LIST_ON_SUCCESS && status != 0)
                 || (item.condition == LIST_ON_FAILURE && status == 0)) {

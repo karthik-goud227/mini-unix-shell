@@ -211,6 +211,22 @@ fail:
     return -1;
 }
 
+size_t command_list_chain_end(const CommandList *list, size_t start)
+{
+    if (start >= list->count) {
+        return list->count;
+    }
+
+    size_t end = start + 1;
+
+    while (end < list->count
+           && list->items[end].condition != LIST_ALWAYS) {
+        end++;
+    }
+
+    return end;
+}
+
 void free_command_list(CommandList *list)
 {
     if (list == NULL) {
@@ -270,14 +286,6 @@ int parse_command_list(const TokenList *tokens, CommandList *result,
 
         int background = !at_end
             && tokens->items[i].type == TOKEN_AMP;
-
-        if (background && condition != LIST_ALWAYS) {
-            if (error_size > 0) {
-                snprintf(error, error_size,
-                         "background logical chains are not supported");
-            }
-            goto fail;
-        }
 
         /* Include '&' so parse_pipeline records background execution. */
         size_t token_count = i - start + (background ? 1 : 0);

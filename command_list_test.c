@@ -186,12 +186,10 @@ int main(void)
           "empty command in list");
     check("missing filename before AND", "echo one > && true", 0,
           "expected filename after redirection");
-    check("background AND chain rejected for now",
-          "true && sleep 1 &", 0,
-          "background logical chains are not supported");
-    check("background OR chain rejected for now",
-          "false || sleep 1 &", 0,
-          "background logical chains are not supported");
+    check("background AND chain",
+          "true && sleep 1 &", 2, NULL);
+    check("background OR chain",
+          "false || sleep 1 &", 2, NULL);
 
 
     check("background separator without spaces",

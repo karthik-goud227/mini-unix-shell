@@ -19,6 +19,23 @@ static int next_job_id = 1;
 static JobStatistics statistics_history[MSH_STATS_HISTORY];
 static size_t statistics_count;
 
+void jobs_reset_after_fork(void)
+{
+    for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
+        Job *job = job_table[i];
+
+        if (job != NULL) {
+            free(job->command_text);
+            free(job);
+            job_table[i] = NULL;
+        }
+    }
+
+    memset(statistics_history, 0, sizeof(statistics_history));
+    statistics_count = 0;
+    next_job_id = 1;
+}
+
 size_t jobs_statistics_count(void)
 {
     return statistics_count;

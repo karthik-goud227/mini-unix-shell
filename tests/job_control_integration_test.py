@@ -382,6 +382,165 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
             output.strip() == "jobs\nmsh>",
         )
 
+
+        output = command(
+            "sleep 300 && echo CHAIN_FORBIDDEN & echo CHAIN_PARENT_READY"
+        )
+        launch = re.search(
+            r"^\[(\d+)\]\s+(\d+)\s*$", output, re.MULTILINE
+        )
+
+        if launch is not None:
+            chain_job_id = launch.group(1)
+            foreground_group = int(launch.group(2))
+
+        check("logical chain launches as one background job",
+              launch is not None)
+        if launch is None:
+            raise RuntimeError(f"Missing chain launch: {output!r}")
+
+        check(
+            "parent continues after background logical chain",
+            "\nCHAIN_PARENT_READY\n" in output,
+        )
+        check(
+            "background chain leaves terminal with shell",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        output = command("jobs")
+        check(
+            "job record contains the whole logical chain",
+            re.search(
+                rf"^\[{chain_job_id}\]\s+Running\s+"
+                r"sleep 300 && echo CHAIN_FORBIDDEN &$",
+                output,
+                re.MULTILINE,
+            ) is not None,
+        )
+
+        send(f"fg %{chain_job_id}\n")
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if os.tcgetpgrp(terminal) == foreground_group:
+                break
+            time.sleep(0.02)
+
+        handed_back = os.tcgetpgrp(terminal) == foreground_group
+        check("fg gives terminal to the logical chain", handed_back)
+        if not handed_back:
+            raise RuntimeError("Logical-chain fg handoff timed out")
+
+        send("\x03")
+        output = read_until(b"msh> ")
+        check(
+            "interruption skips remaining chain command",
+            "\nCHAIN_FORBIDDEN\n" not in output,
+        )
+
+        output = command("echo $?")
+        check(
+            "interrupted logical chain returns status 130",
+            "\n130\n" in output,
+        )
+
+        output = command("jobs")
+        check(
+            "interrupted logical chain leaves no active job",
+            output.strip() == "jobs\nmsh>",
+        )
+        foreground_group = None
+
+
+        # Stop and resume an entire background logical chain.
+        output = command(
+            "sleep 300 && echo RESUMED_CHAIN_FORBIDDEN & echo RESUME_CHAIN_READY"
+        )
+        launch = re.search(
+            r"^\[(\d+)\]\s+(\d+)\s*$", output, re.MULTILINE
+        )
+
+        if launch is not None:
+            resume_chain_id = launch.group(1)
+            foreground_group = int(launch.group(2))
+
+        check("resumable logical chain launches", launch is not None)
+        if launch is None:
+            raise RuntimeError(f"Missing resumable chain: {output!r}")
+
+        def foreground_resume_chain(label):
+            send(f"fg %{resume_chain_id}\n")
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                if os.tcgetpgrp(terminal) == foreground_group:
+                    break
+                time.sleep(0.02)
+
+            handed_back = os.tcgetpgrp(terminal) == foreground_group
+            check(label, handed_back)
+            if not handed_back:
+                raise RuntimeError("Resumable-chain fg handoff timed out")
+
+        foreground_resume_chain("logical chain initially receives terminal")
+        send("\x1a")
+        output = read_until(b"msh> ")
+
+        check(
+            "Ctrl+Z reports the logical chain stopped",
+            re.search(rf"\[{resume_chain_id}\]\s+Stopped\b", output)
+            is not None,
+        )
+        check(
+            "shell reclaims terminal after chain stops",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        output = command("jobs")
+        check(
+            "jobs lists the stopped logical chain",
+            re.search(rf"\[{resume_chain_id}\]\s+Stopped\b", output)
+            is not None,
+        )
+
+        output = command(f"bg %{resume_chain_id}")
+        check(
+            "bg resumes the logical chain",
+            re.search(rf"\[{resume_chain_id}\]\s+Running\b", output)
+            is not None,
+        )
+        check(
+            "resuming chain in background preserves shell terminal ownership",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        output = command("jobs")
+        check(
+            "jobs lists the resumed logical chain running",
+            re.search(rf"\[{resume_chain_id}\]\s+Running\b", output)
+            is not None,
+        )
+
+        foreground_resume_chain("resumed logical chain receives terminal again")
+        send("\x03")
+        output = read_until(b"msh> ")
+        check(
+            "interrupted resumed chain skips remaining command",
+            "\nRESUMED_CHAIN_FORBIDDEN\n" not in output,
+        )
+
+        output = command("echo $?")
+        check(
+            "interrupted resumed chain returns status 130",
+            "\n130\n" in output,
+        )
+
+        output = command("jobs")
+        check(
+            "resumed and interrupted chain leaves no active job",
+            output.strip() == "jobs\nmsh>",
+        )
+        foreground_group = None
+
         send("exit 0\n")
         deadline = time.monotonic() + 10
 

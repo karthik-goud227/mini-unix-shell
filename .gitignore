@@ -11,3 +11,7 @@ usage_test
 usage_collection_test
 statistics_test
 command_list_test
+/jobs_fork_test
+/chain_wait_test
+/chain_stop_test
+/chain_copy_test

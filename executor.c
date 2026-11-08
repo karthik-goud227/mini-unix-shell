@@ -52,6 +52,30 @@ static void terminate_job(Job *job)
     }
 }
 
+_Noreturn void execute_child_command(const Command *command,
+                                     int last_status)
+{
+
+    if (apply_redirections(command) == -1) {
+        _exit(1);
+    }
+
+    if (is_builtin(command)) {
+        BuiltinResult result = run_builtin(command, last_status);
+        _exit(fflush(stdout) == EOF ? 1 : result.status);
+    }
+
+    execvp(command->argv[0], command->argv);
+
+    int saved_errno = errno;
+
+    fprintf(stderr, "msh: %s: %s\n",
+            command->argv[0], strerror(saved_errno));
+
+    _exit(saved_errno == ENOENT || saved_errno == ENOTDIR
+          ? 127 : 126);
+}
+
 static void run_child(const Pipeline *pipeline, size_t index,
                       int pipes[][2], size_t pipe_count,
                       int gate[2], pid_t pgid,
@@ -105,26 +129,7 @@ static void run_child(const Pipeline *pipeline, size_t index,
 
     close_pipes(pipes, pipe_count);
 
-    const Command *command = &pipeline->commands[index];
-
-    if (apply_redirections(command) == -1) {
-        _exit(1);
-    }
-
-    if (is_builtin(command)) {
-        BuiltinResult result = run_builtin(command, 0);
-        _exit(fflush(stdout) == EOF ? 1 : result.status);
-    }
-
-    execvp(command->argv[0], command->argv);
-
-    int saved_errno = errno;
-
-    fprintf(stderr, "msh: %s: %s\n",
-            command->argv[0], strerror(saved_errno));
-
-    _exit(saved_errno == ENOENT || saved_errno == ENOTDIR
-          ? 127 : 126);
+    execute_child_command(&pipeline->commands[index], 0);
 }
 
 int execute_pipeline(const Pipeline *pipeline,

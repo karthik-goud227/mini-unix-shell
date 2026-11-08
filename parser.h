@@ -74,6 +74,13 @@ typedef struct {
 int parse_command_list(const TokenList *tokens, CommandList *result,
                        char *error, size_t error_size);
 
+/*
+ * Return the exclusive end index of the logical chain starting at start.
+ * The caller supplies a valid list and starts at a chain boundary.
+ * If start is at or beyond count, return count.
+ */
+size_t command_list_chain_end(const CommandList *list, size_t start);
+
 void free_command_list(CommandList *list);
 
 #endif

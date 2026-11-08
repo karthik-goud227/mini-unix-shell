@@ -101,4 +101,10 @@ int jobs_print(void);
 /* Terminate remaining jobs, reap children and release the table. */
 void jobs_shutdown(void);
 
+/*
+ * Child-only: discard inherited job records and statistics after fork.
+ * Does not signal or wait for any process.
+ */
+void jobs_reset_after_fork(void);
+
 #endif

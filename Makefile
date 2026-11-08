@@ -1,6 +1,6 @@
 CC = gcc
 CFLAGS = -std=c11 -D_POSIX_C_SOURCE=200809L -Wall -Wextra -Wpedantic -g -O0
-OBJ = main.o history.o expansion.o lexer.o parser.o executor.o builtins.o redirection.o terminal.o jobs.o job_control.o signals.o input.o
+OBJ = main.o chain.o history.o expansion.o lexer.o parser.o executor.o builtins.o redirection.o terminal.o jobs.o job_control.o signals.o input.o
 
 .PHONY: all clean test
 
@@ -25,6 +25,14 @@ input.o: input.c input.h jobs.h signals.h
 jobs.o: jobs.c jobs.h
 job_control.o: job_control.c job_control.h jobs.h terminal.h
 
+main.o: chain.h
+chain.o: chain.c chain.h executor.h builtins.h expansion.h jobs.h signals.h terminal.h parser.h lexer.h
+
+CHAIN_TEST_OBJ = $(filter-out main.o chain.o,$(OBJ))
+
+chain_wait_test chain_stop_test chain_copy_test: %: %.c chain.c chain.h $(CHAIN_TEST_OBJ)
+	$(CC) $(CFLAGS) -Wno-unused-function $< $(CHAIN_TEST_OBJ) -o $@
+
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -36,6 +44,9 @@ parser_test: parser_test.c parser.o lexer.o parser.h lexer.h
 
 jobs_test: jobs_test.c jobs.o jobs.h
 	$(CC) $(CFLAGS) jobs_test.c jobs.o -o jobs_test
+
+jobs_fork_test: jobs_fork_test.c jobs.o jobs.h
+	$(CC) $(CFLAGS) jobs_fork_test.c jobs.o -o jobs_fork_test
 
 expansion_test: expansion_test.c expansion.o lexer.o expansion.h lexer.h
 	$(CC) $(CFLAGS) expansion_test.c expansion.o lexer.o -o expansion_test
@@ -52,11 +63,15 @@ statistics_test: statistics_test.c jobs.o jobs.h
 command_list_test: command_list_test.c parser.o lexer.o parser.h lexer.h
 	$(CC) $(CFLAGS) command_list_test.c parser.o lexer.o -o command_list_test
 
-test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test
+test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test jobs_fork_test chain_wait_test chain_stop_test chain_copy_test
 	./lexer_test
 	./parser_test
 	./command_list_test
 	./jobs_test
+	./jobs_fork_test
+	./chain_wait_test
+	./chain_stop_test
+	./chain_copy_test
 	./expansion_test
 	./usage_test
 	./usage_collection_test
@@ -69,6 +84,10 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	python3 tests/history_test.py
 	python3 tests/history_integration_test.py
 	python3 tests/job_control_integration_test.py
+	python3 tests/chain_pipeline_test.py
+	python3 tests/chain_evaluation_test.py
+	python3 tests/chain_signal_test.py
+	python3 tests/chain_launch_test.py
 
 clean:
-	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test
+	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test jobs_fork_test chain_wait_test chain_stop_test chain_copy_test
