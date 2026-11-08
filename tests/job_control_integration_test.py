@@ -594,6 +594,55 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
             "\n1\n" in output,
         )
 
+        # Assignment-only commands modify the supervisor; prefixes stay temporary.
+        command("unset MSH_CHAIN_ASSIGN_TEST")
+        command("MSH_CHAIN_ASSIGN_TEST=parent")
+        output = command(
+            "MSH_CHAIN_ASSIGN_TEST=supervisor && "
+            "MSH_CHAIN_ASSIGN_TEST=temporary printenv MSH_CHAIN_ASSIGN_TEST "
+            "> chain-assignment-output && "
+            'echo "$MSH_CHAIN_ASSIGN_TEST" >> chain-assignment-output &'
+        )
+
+        launch = re.search(r"\[(\d+)\]\s+(\d+)", output)
+        check("assignment logical chain launches", launch is not None)
+        if launch is None:
+            raise RuntimeError(f"Missing assignment chain job: {output!r}")
+        background_groups.add(int(launch.group(2)))
+
+        check(
+            "assignment chain preserves shell terminal ownership",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        result_path = Path(workdir) / "chain-assignment-output"
+        deadline = time.monotonic() + 10
+        contents = ""
+        while time.monotonic() < deadline:
+            if result_path.exists():
+                contents = result_path.read_text()
+                if contents == "temporary\nsupervisor\n":
+                    break
+            time.sleep(0.02)
+
+        check(
+            "chain child prefix preserves supervisor assignment",
+            contents == "temporary\nsupervisor\n",
+        )
+
+        output = command('echo "$MSH_CHAIN_ASSIGN_TEST"')
+        check(
+            "chain assignments preserve parent local value",
+            "\nparent\n" in output,
+        )
+
+        command("printenv MSH_CHAIN_ASSIGN_TEST")
+        output = command("echo $?")
+        check(
+            "chain assignments preserve parent export state",
+            "\n1\n" in output,
+        )
+
         send("exit 0\n")
         deadline = time.monotonic() + 10
 

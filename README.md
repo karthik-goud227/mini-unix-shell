@@ -329,9 +329,22 @@ prefix isolation and require an interactive terminal. For example:
 
     MSH_DEMO=temporary printenv MSH_DEMO > demo-output &
 
+Inside a background logical chain, assignment-only commands update the
+supervisor's variables. Later executed commands see those values, while
+the parent shell remains unchanged. Prefix assignments on external
+commands and pipeline stages remain temporary to their individual children.
+
+For example:
+
+    MSH_DEMO=supervisor && MSH_DEMO=temporary printenv MSH_DEMO && echo "$MSH_DEMO" &
+
+This prints temporary followed by supervisor. Skipped assignments have no
+effect, and assignment values expand using the supervisor's current
+variables and previous status.
+
 Assignment prefixes before built-ins remain unsupported. Assignment-only
-execution inside pipelines or background jobs remains unsupported.
-Assignments inside background logical chains are not supported yet.
+pipeline stages and standalone assignment-only background jobs remain
+unsupported.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -543,9 +556,9 @@ The current implementation does not support:
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Assignment prefixes before built-ins or inside background logical chains
+- Assignment prefixes before built-ins
 - Loops, functions or a scripting language
-- Bare assignment execution inside pipelines or background jobs/chains
+- Assignment-only pipeline stages or standalone assignment-only background jobs
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
@@ -593,7 +606,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 job-state and resource-lifecycle checks.
 - 6 fork-isolation checks for inherited job records.
 - 8 chain-wait checks, 3 stop/resume checks and 9 token-copy checks.
-- 10 chain-pipeline checks and 14 chain-evaluation checks.
+- 10 chain-pipeline checks and 20 chain-evaluation checks.
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
 - 17 expansion unit tests.
@@ -607,7 +620,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 66 interactive job-control checks using a pseudo-terminal (PTY).
+- 71 interactive job-control checks using a pseudo-terminal (PTY).
 - 136 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable and 19 command-prefix tests.
@@ -755,3 +768,9 @@ preservation and completed-job cleanup freed all 403 allocations, reported
 zero memory errors, and left only three standard descriptors open.
 Child reports were suppressed with --child-silent-after-fork=yes;
 these figures describe the parent shell.
+
+A chain-assignment Valgrind run covering supervisor assignments, temporary
+external prefixes, parent-value preservation and completed-job cleanup
+freed all 256 allocations, reported zero memory errors, and left only
+three standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.

@@ -440,8 +440,8 @@ static int chain_evaluate(const TokenList *tokens,
         }
 
         Pipeline pipeline = {0};
-        int parsed = parse_pipeline(&part, &pipeline,
-                                    error, sizeof(error));
+        int parsed = parse_pipeline_assignments(&part, &pipeline,
+                                                error, sizeof(error));
         free_tokens(&part);
 
         if (parsed == -1) {
@@ -449,11 +449,31 @@ static int chain_evaluate(const TokenList *tokens,
             return 2;
         }
 
+        int unsupported_assignment = 0;
+        for (size_t stage = 0; stage < pipeline.command_count; stage++) {
+            const Command *command = &pipeline.commands[stage];
+            if (command->assignment_count > 0
+                && ((command->argc == 0 && pipeline.command_count != 1)
+                    || (command->argc > 0 && is_builtin(command)))) {
+                unsupported_assignment = 1;
+            }
+        }
+
+        if (unsupported_assignment) {
+            fprintf(stderr,
+                    "msh: chain assignments require an assignment-only "
+                    "command or an external command/pipeline stage\n");
+            free_pipeline(&pipeline);
+            status = 2;
+            continue;
+        }
+
         int should_exit = 0;
 
         if (pipeline.command_count == 1 && !pipeline.background) {
             const Command *command = &pipeline.commands[0];
-            const char *name = command->argv[0];
+            const char *name =
+                command->argc > 0 ? command->argv[0] : "";
 
             int unsupported =
                 strcmp(name, "jobs") == 0

@@ -105,6 +105,34 @@ cases = [
      "echo background &", "background\n", 0),
 ]
 
+
+cases.extend([
+    ("assignment-only command updates supervisor",
+     'MSH_CHAIN_VALUE=supervisor && echo "$MSH_CHAIN_VALUE"',
+     "supervisor\n", 0),
+    ("ordered assignments inside supervisor",
+     'MSH_CHAIN_FIRST=hello MSH_CHAIN_SECOND="$MSH_CHAIN_FIRST world" '
+     '&& echo "$MSH_CHAIN_SECOND"',
+     "hello world\n", 0),
+    ("skipped assignment preserves supervisor value",
+     'false && MSH_CHAIN_VALUE=changed || echo "$MSH_CHAIN_VALUE"',
+     "parent\n", 0),
+    ("external prefix leaves supervisor value intact",
+     'MSH_CHAIN_VALUE=supervisor && '
+     'MSH_CHAIN_VALUE=temporary printenv MSH_CHAIN_VALUE && '
+     'echo "$MSH_CHAIN_VALUE"',
+     "temporary\nsupervisor\n", 0),
+    ("assignment value receives previous status",
+     'false || MSH_CHAIN_STATUS=$? && echo "$MSH_CHAIN_STATUS"',
+     "1\n", 0),
+    ("chain pipeline prefixes stay isolated",
+     'MSH_CHAIN_VALUE=left printenv MSH_CHAIN_VALUE | '
+     'MSH_CHAIN_VALUE=right sh -c '
+     '\'read line; printf "%s:%s\\n" "$line" "$MSH_CHAIN_VALUE"\' '
+     '&& echo "$MSH_CHAIN_VALUE"',
+     "left:right\nparent\n", 0),
+])
+
 failures = 0
 
 with tempfile.TemporaryDirectory(prefix="msh-chain-evaluation-") as directory:
