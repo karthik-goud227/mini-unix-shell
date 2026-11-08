@@ -112,12 +112,34 @@ check("skipped prefix command has no effect",
 check("built-in prefix rejected for now",
       "MSH_PREFIX_TEST=temporary pwd\nexit\n",
       expected_status=2,
-      error="assignments require a standalone foreground")
+      error="assignments require a standalone foreground assignment-only command or a foreground external")
 
-check("pipeline prefix rejected for now",
+check("pipeline prefix enters stage environment",
       "MSH_PREFIX_TEST=temporary printenv MSH_PREFIX_TEST | cat\nexit\n",
-      expected_status=2,
-      error="assignments require a standalone foreground")
+      "temporary\n")
+
+
+check("pipeline stages have independent prefix values",
+      "MSH_PREFIX_TEST=parent\n"
+      "MSH_PREFIX_TEST=left printenv MSH_PREFIX_TEST | "
+      "MSH_PREFIX_TEST=right sh -c "
+      "'read line; printf \"%s:%s\\n\" \"$line\" \"$MSH_PREFIX_TEST\"'\n"
+      'echo "$MSH_PREFIX_TEST"\nexit\n',
+      "left:right\nparent\n")
+
+check("prefix does not enter an unprefixed sibling",
+      "export MSH_PREFIX_TEST=parent\n"
+      "MSH_PREFIX_TEST=left printenv MSH_PREFIX_TEST | "
+      "sh -c 'read line; printf \"%s:%s\\n\" \"$line\" \"$MSH_PREFIX_TEST\"'\n"
+      "printenv MSH_PREFIX_TEST\nexit\n",
+      "left:parent\nparent\n")
+
+check("prefixed final stage determines failure status",
+      "printf 'input\\n' | MSH_PREFIX_TEST=temporary false\nexit\n",
+      expected_status=1)
+
+check("prefixed earlier failure allows final success",
+      "MSH_PREFIX_TEST=temporary false | cat\nexit\n")
 
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

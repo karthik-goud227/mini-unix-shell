@@ -295,7 +295,8 @@ ones succeed, those earlier changes remain. Successful assignment-only
 commands return 0 and do not create a job.
 
 Assignments without a command update the parent shell. Assignment prefixes
-before a standalone foreground external command apply only in its child:
+before a foreground external command or pipeline stage apply only
+in that command's child:
 
     MSH_DEMO=parent
     MSH_DEMO=temporary printenv MSH_DEMO
@@ -313,9 +314,18 @@ values before temporary assignments are applied. Redirections are applied
 before the child assignments; a failed redirection prevents execution.
 Skipped commands do not apply their prefixes.
 
-Assignment prefixes before built-ins, pipeline stages and background
-commands remain unsupported. Assignment-only execution inside pipelines
-or background jobs/chains also remains unsupported.
+Each external stage of a foreground pipeline can have its own prefixes:
+
+    MSH_DEMO=left printenv MSH_DEMO | cat
+    printf 'input\n' | MSH_DEMO=right printenv MSH_DEMO
+
+Each stage receives its own temporary values. A stage's prefixes do not
+change sibling stages or the parent shell. The final stage determines
+the pipeline status.
+
+Assignment prefixes before built-ins and background commands remain
+unsupported. Assignment-only execution inside pipelines or background
+jobs/chains also remains unsupported.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -527,7 +537,7 @@ The current implementation does not support:
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Assignment prefixes before built-ins, pipelines or background commands
+- Assignment prefixes before built-ins or background commands
 - Loops, functions or a scripting language
 - Bare assignment execution inside pipelines or background jobs/chains
 - Persistent history, history recall, arrow-key navigation or autocomplete
@@ -592,9 +602,9 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 60 interactive job-control checks using a pseudo-terminal (PTY).
-- 132 non-interactive whole-shell integration tests: 24 general,
+- 136 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
-  14 standalone shell-variable and 15 command-prefix tests.
+  14 standalone shell-variable and 19 command-prefix tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -726,4 +736,10 @@ A command-prefix Valgrind run covering temporary values, parent-value
 preservation, ordered prefixes, status expansion and failed redirection
 freed all 663 allocations, reported zero memory errors, and left only
 three standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.
+
+A pipeline-assignment Valgrind run covering stage isolation, parent-value
+preservation, pipeline statuses and failed redirection freed all 647
+allocations, reported zero memory errors, and left only three standard
+descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.
