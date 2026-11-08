@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "builtins.h"
+#include "variables.h"
 #include "chain.h"
 #include "executor.h"
 #include "expansion.h"
@@ -179,13 +180,35 @@ int main(void)
 
             Pipeline pipeline;
 
-            if (parse_pipeline(&part, &pipeline,
+            if (parse_pipeline_assignments(&part, &pipeline,
                                error, sizeof(error)) == -1) {
                 fprintf(stderr, "msh: %s\n", error);
                 free(command_text);
                 status = 2;
                 exit_warned = 0;
                 break;
+            }
+
+            int unsupported_assignment = 0;
+            for (size_t stage = 0; stage < pipeline.command_count; stage++) {
+                const Command *command = &pipeline.commands[stage];
+                if (command->assignment_count > 0
+                    && (command->argc > 0
+                        || pipeline.command_count != 1
+                        || pipeline.background)) {
+                    unsupported_assignment = 1;
+                }
+            }
+
+            if (unsupported_assignment) {
+                fprintf(stderr,
+                        "msh: assignments currently require a standalone "
+                        "foreground assignment-only command\n");
+                free_pipeline(&pipeline);
+                free(command_text);
+                status = 2;
+                exit_warned = 0;
+                continue;
             }
 
             if (pipeline.command_count == 1 && !pipeline.background) {
@@ -230,6 +253,7 @@ int main(void)
     }
 
     jobs_shutdown();
+    variables_clear();
     history_clear();
     signals_close();
 

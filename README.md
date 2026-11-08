@@ -58,7 +58,8 @@ make clean
 - External programs with arguments and PATH lookup
 - Built-ins: cd, pwd, exit, jobs, fg, bg, stats, export, unset and history
 - Single and double quotes for argument grouping
-- Environment-variable expansion with $NAME
+- Shell-variable and environment-variable expansion with $NAME
+- Standalone foreground assignments with NAME=value
 - Environment-variable assignment and removal with export/unset
 - Previous command status expansion with $?
 - Empty quoted arguments and adjacent quoted/unquoted fragments
@@ -223,8 +224,8 @@ Before each pipeline executes, its tokens are expanded and parsed
 into executable commands. Original token spelling preserves quote
 and escape boundaries.
 
-- `$NAME` reads the shell's current environment, including inherited
-  variables and values set using export.
+- `$NAME` reads shell-variable storage, falling back to the environment.
+  It includes local assignments, inherited values and exported values.
 - `$?` expands to the previous command's status.
 - Double quotes allow expansion; single quotes prevent it.
 - A backslash before `$` prevents expansion outside quotes and inside
@@ -259,9 +260,43 @@ the last executed item; skipped items leave that status unchanged.
 
 Only `$NAME` and `$?` are supported. Braced expansion such as `${HOME}`,
 positional parameters such as `$1`, and special parameters such as `$$`
-are not implemented. Bare assignments such as NAME=value and
-per-command assignments such as NAME=value command are not supported;
-use export NAME=value instead.
+are not implemented. Standalone foreground assignments such as
+NAME=value are supported. Per-command assignments such as
+NAME=value command remain unsupported.
+
+## Local shell variables
+
+Standalone foreground assignment-only commands create or update variables.
+Examples inside msh:
+
+    MSH_DEMO=hello
+    echo "$MSH_DEMO"
+    MSH_DEMO="hello world"
+    A=hello B="$A world"
+    echo "$B"
+
+A new variable is local unless it already exists in the environment.
+Local values expand through $NAME but do not appear in child programs'
+environments. export NAME=value creates or replaces an exported value.
+Reassigning an exported variable preserves its export status.
+unset NAME removes both local storage and any environment entry.
+
+Multiple assignments apply from left to right. A later value can refer
+to an earlier assignment in the same command. Values support quotes,
+escapes, empty strings, additional equals signs and $? expansion.
+
+The name and equals sign must be unquoted and unescaped. A quoted whole
+word such as 'NAME=value' is ordinary command text.
+
+Redirection is supported. If redirection setup fails, no assignments
+from that command are applied. If a later assignment fails after earlier
+ones succeed, those earlier changes remain. Successful assignment-only
+commands return 0 and do not create a job.
+
+For now, assignment execution is limited to standalone foreground
+assignment-only commands. Command prefixes such as NAME=value command,
+pipeline assignments and background assignments remain unsupported.
+export NAME without a value is also not implemented yet.
 
 ## Environment built-ins
 
@@ -274,9 +309,9 @@ printenv MSH_DEMO
 unset MSH_DEMO
 ```
 
-export sets or replaces exactly one variable in the shell's environment.
-Future child programs inherit it. unset removes exactly one variable;
-removing an absent variable succeeds.
+export NAME=value sets or replaces one shell variable and exports it
+to future child programs. unset removes one variable from shell storage
+and the environment. Removing an absent variable succeeds.
 
 Names must match `[A-Za-z_][A-Za-z0-9_]*`. Values may be empty, contain
 spaces when quoted, or contain additional equals signs. The first equals
@@ -307,9 +342,10 @@ operational failures return 1. Changes affect this shell and future
 children, not its parent terminal shell or already-running children.
 The commands do not write persistent configuration.
 
-This version does not support multiple assignments/names in one command,
-export without an assignment, environment listing through export, options,
-or a separate set of unexported shell variables.
+The export and unset built-ins each accept one operand. This version
+does not support export without an assignment, environment listing
+through export, or export/unset options. Multiple local assignments
+in one assignment-only command are supported separately.
 
 ## Command history
 
@@ -466,7 +502,8 @@ The current implementation does not support:
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Bare or per-command assignments, loops, functions or a scripting language
+- Per-command assignments, loops, functions or a scripting language
+- Bare assignment execution inside pipelines or background jobs/chains
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
@@ -486,7 +523,10 @@ A normal exit with numeric status 130 does not trigger this newline.
 | input.c | Bounded input and poll-based event waiting |
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
-| expansion.c | Quote-aware environment and previous-status expansion |
+| expansion.c | Quote-aware shell-variable and previous-status expansion |
+| variables.c | Local storage, export status, lookup, removal and cleanup |
+| assignment.c | Recognition of unquoted assignment prefixes |
+| assignment_exec.c | Ordered assignment-value expansion and application |
 | parser.c | Command-list validation, token ranges, pipelines and redirections |
 | executor.c | Pipes, fork/exec, grouping and launch synchronization |
 | chain.c | Background-chain supervisor, evaluation and pipeline lifecycle |
@@ -515,14 +555,20 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
 - 17 expansion unit tests.
+- 22 variable-storage checks.
+- 20 assignment-recognition checks.
+- 15 assignment-parser checks.
+- 14 assignment-execution checks.
+- 9 assignment-dispatcher and redirection checks.
 - 9 resource-recorder checks.
 - 5 actual resource-collection checks.
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 60 interactive job-control checks using a pseudo-terminal (PTY).
-- 96 non-interactive whole-shell integration tests: 24 general,
-  34 command-list, 11 expansion, 10 statistics and 17 environment tests.
+- 110 non-interactive whole-shell integration tests: 24 general,
+  34 command-list, 11 expansion, 10 statistics, 17 environment
+  and 14 standalone shell-variable tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -624,13 +670,19 @@ and left only three standard descriptors open. Child diagnostics
 were suppressed by --child-silent-after-fork=yes, so this result
 describes the parent shell's reported memory and descriptor state.
 
+A standalone shell-variable Valgrind run covering local assignment,
+ordered expansion, export, reassignment, removal, empty values and
+failed redirection freed all 503 allocations, reported zero memory
+errors, and left only three standard descriptors open.
+
 These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
 The next priority is broader coverage of the base paper's shell behavior,
-including shell variables, parameter expansion,
-scripts, control structures, grouping and command substitution.
+including command-prefix assignments, broader assignment execution,
+parameter expansion, scripts, control structures, grouping and
+command substitution.
 
 Further extensions such as persistent history, history recall,
 autocomplete and a project-specific memory allocator are deferred

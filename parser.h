@@ -22,6 +22,10 @@ typedef struct {
     char **argv;
     size_t argc;
 
+    /* Owned original spellings of leading NAME=value words. */
+    char **assignments;
+    size_t assignment_count;
+
     Redirection *redirections;
     size_t redirection_count;
 } Command;
@@ -42,6 +46,14 @@ typedef struct {
  */
 int parse_pipeline(const TokenList *tokens, Pipeline *result,
                    char *error, size_t error_size);
+
+/*
+ * Parse leading assignment words separately from argv.
+ * Assignment-only commands are accepted.
+ * Uses the same ownership rules as parse_pipeline().
+ */
+int parse_pipeline_assignments(const TokenList *tokens, Pipeline *result,
+                               char *error, size_t error_size);
 
 void free_pipeline(Pipeline *pipeline);
 

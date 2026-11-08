@@ -1,4 +1,5 @@
 #include "expansion.h"
+#include "variables.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -115,7 +116,7 @@ static char *expand_word(const char *raw, int last_status)
             memcpy(name, raw + start, length);
             name[length] = '\0';
 
-            const char *value = getenv(name);
+            const char *value = variables_get(name);
             free(name);
 
             if (value != NULL

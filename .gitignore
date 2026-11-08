@@ -15,3 +15,8 @@ command_list_test
 /chain_wait_test
 /chain_stop_test
 /chain_copy_test
+/variables_test
+/assignment_test
+/assignment_parser_test
+/assignment_exec_test
+/assignment_builtin_test

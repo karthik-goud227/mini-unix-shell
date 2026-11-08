@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "builtins.h"
+#include "variables.h"
+#include "assignment.h"
 #include "history.h"
 #include "jobs.h"
 #include "job_control.h"
@@ -127,7 +129,7 @@ static int builtin_export(const Command *command)
         return 1;
     }
 
-    int result = setenv(name, equals + 1, 1);
+    int result = variables_set(name, equals + 1, 1);
     int saved_errno = errno;
     free(name);
 
@@ -154,7 +156,7 @@ static int builtin_unset(const Command *command)
         return 2;
     }
 
-    if (unsetenv(name) == -1) {
+    if (variables_unset(name) == -1) {
         perror("msh: unset");
         return 1;
     }
@@ -192,7 +194,7 @@ static int builtin_cd(const Command *command)
     const char *path;
 
     if (command->argc == 1) {
-        path = getenv("HOME");
+        path = variables_get("HOME");
 
         if (path == NULL || path[0] == '\0') {
             fprintf(stderr, "msh: cd: HOME is not set or is empty\n");
@@ -389,6 +391,19 @@ BuiltinResult run_builtin(const Command *command, int last_status)
     BuiltinResult result = {0};
 
     if (command->argc == 0) {
+        if (command->assignment_count > 0) {
+            char error[128];
+            result.handled = 1;
+            result.status = 0;
+
+            if (assignments_apply(command->assignments,
+                                  command->assignment_count,
+                                  0, last_status,
+                                  error, sizeof(error)) == -1) {
+                fprintf(stderr, "msh: %s\n", error);
+                result.status = 1;
+            }
+        }
         return result;
     }
 
@@ -454,7 +469,7 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 int is_builtin(const Command *command)
 {
     if (command->argc == 0) {
-        return 0;
+        return command->assignment_count > 0;
     }
 
     const char *name = command->argv[0];
@@ -478,7 +493,7 @@ BuiltinResult run_builtin_redirected(const Command *command,
         return (BuiltinResult) {0};
     }
 
-    if (command->redirection_count > 0
+    if (command->argc > 0 && command->redirection_count > 0
         && (strcmp(command->argv[0], "fg") == 0
             || strcmp(command->argv[0], "bg") == 0)) {
         fprintf(stderr, "msh: %s: redirection is not supported\n",

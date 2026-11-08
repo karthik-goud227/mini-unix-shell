@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "parser.h"
+#include "assignment.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,11 @@ void free_pipeline(Pipeline *pipeline)
             free(command->argv[j]);
         }
         free(command->argv);
+
+        for (size_t j = 0; j < command->assignment_count; j++) {
+            free(command->assignments[j]);
+        }
+        free(command->assignments);
 
         for (size_t j = 0; j < command->redirection_count; j++) {
             free(command->redirections[j].path);
@@ -43,6 +49,29 @@ static int add_command(Pipeline *pipeline)
     pipeline->commands = grown;
     pipeline->commands[count] = (Command) {0};
     pipeline->command_count++;
+    return 0;
+}
+
+
+static int add_assignment(Command *command, const char *raw)
+{
+    char *copy = strdup(raw);
+    if (copy == NULL) {
+        return -1;
+    }
+
+    size_t count = command->assignment_count;
+    char **grown = realloc(command->assignments,
+                           (count + 1) * sizeof(*grown));
+
+    if (grown == NULL) {
+        free(copy);
+        return -1;
+    }
+
+    command->assignments = grown;
+    command->assignments[count] = copy;
+    command->assignment_count++;
     return 0;
 }
 
@@ -103,8 +132,9 @@ static int add_redirection(Command *command,
     return 0;
 }
 
-int parse_pipeline(const TokenList *tokens, Pipeline *result,
-                   char *error, size_t error_size)
+static int parse_pipeline_internal(
+    int recognize_assignments, const TokenList *tokens, Pipeline *result,
+    char *error, size_t error_size)
 {
     const char *message = NULL;
     size_t position = 0;
@@ -133,6 +163,21 @@ int parse_pipeline(const TokenList *tokens, Pipeline *result,
 
         switch (token->type) {
         case TOKEN_WORD:
+            if (recognize_assignments && command->argc == 0) {
+                size_t name_length;
+                if (assignment_name_length(token->raw_text, &name_length)) {
+                    if (command->assignment_count >= MSH_MAX_ARGS) {
+                        message = "too many assignments (maximum 128)";
+                        goto fail;
+                    }
+
+                    if (add_assignment(command, token->raw_text) == -1) {
+                        message = "out of memory";
+                        goto fail;
+                    }
+                    break;
+                }
+            }
             if (command->argc >= MSH_MAX_ARGS) {
                 message = "too many arguments (maximum 128)";
                 goto fail;
@@ -163,7 +208,8 @@ int parse_pipeline(const TokenList *tokens, Pipeline *result,
             break;
 
         case TOKEN_PIPE:
-            if (command->argc == 0 || i + 1 == tokens->count) {
+            if ((command->argc == 0 && command->assignment_count == 0)
+                || i + 1 == tokens->count) {
                 message = "empty command in pipeline";
                 goto fail;
             }
@@ -180,7 +226,8 @@ int parse_pipeline(const TokenList *tokens, Pipeline *result,
             goto fail;
 
         case TOKEN_AMP:
-            if (command->argc == 0 || i + 1 != tokens->count) {
+            if ((command->argc == 0 && command->assignment_count == 0)
+                || i + 1 != tokens->count) {
                 message = "'&' must follow a command and end the line";
                 goto fail;
             }
@@ -194,7 +241,9 @@ int parse_pipeline(const TokenList *tokens, Pipeline *result,
         }
     }
 
-    if (result->commands[result->command_count - 1].argc == 0) {
+    if (result->commands[result->command_count - 1].argc == 0
+        && result->commands[result->command_count - 1]
+               .assignment_count == 0) {
         message = "expected command name";
         goto fail;
     }
@@ -209,6 +258,18 @@ fail:
 
     free_pipeline(result);
     return -1;
+}
+
+int parse_pipeline(const TokenList *tokens, Pipeline *result,
+                   char *error, size_t error_size)
+{
+    return parse_pipeline_internal(0, tokens, result, error, error_size);
+}
+
+int parse_pipeline_assignments(const TokenList *tokens, Pipeline *result,
+                               char *error, size_t error_size)
+{
+    return parse_pipeline_internal(1, tokens, result, error, error_size);
 }
 
 size_t command_list_chain_end(const CommandList *list, size_t start)
