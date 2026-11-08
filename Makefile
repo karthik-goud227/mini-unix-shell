@@ -39,6 +39,9 @@ CHAIN_TEST_OBJ = $(filter-out main.o chain.o,$(OBJ))
 chain_wait_test chain_stop_test chain_copy_test: %: %.c chain.c chain.h $(CHAIN_TEST_OBJ)
 	$(CC) $(CFLAGS) -Wno-unused-function $< $(CHAIN_TEST_OBJ) -o $@
 
+variables_snapshot_test: variables_snapshot_test.c variables.o variables.h
+	$(CC) $(CFLAGS) variables_snapshot_test.c variables.o -o $@
+
 variables_test: variables_test.c variables.o variables.h
 	$(CC) $(CFLAGS) variables_test.c variables.o -o $@
 
@@ -84,7 +87,7 @@ statistics_test: statistics_test.c jobs.o jobs.h
 command_list_test: command_list_test.c parser.o lexer.o assignment.o parser.h lexer.h
 	$(CC) $(CFLAGS) command_list_test.c parser.o lexer.o assignment.o -o command_list_test
 
-test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test jobs_fork_test chain_wait_test chain_stop_test chain_copy_test variables_test assignment_test assignment_parser_test assignment_exec_test assignment_builtin_test
+test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test jobs_fork_test chain_wait_test chain_stop_test chain_copy_test variables_test assignment_test assignment_parser_test assignment_exec_test assignment_builtin_test variables_snapshot_test
 	./lexer_test
 	./parser_test
 	./command_list_test
@@ -95,6 +98,7 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	./chain_copy_test
 	./expansion_test
 	./variables_test
+	./variables_snapshot_test
 	./assignment_test
 	./assignment_parser_test
 	./assignment_exec_test
@@ -118,4 +122,4 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	python3 tests/chain_launch_test.py
 
 clean:
-	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test jobs_fork_test chain_wait_test chain_stop_test chain_copy_test variables_test assignment_test assignment_parser_test assignment_exec_test assignment_builtin_test
+	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test jobs_fork_test chain_wait_test chain_stop_test chain_copy_test variables_test assignment_test assignment_parser_test assignment_exec_test assignment_builtin_test variables_snapshot_test

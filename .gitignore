@@ -20,3 +20,4 @@ command_list_test
 /assignment_parser_test
 /assignment_exec_test
 /assignment_builtin_test
+/variables_snapshot_test

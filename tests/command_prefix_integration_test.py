@@ -109,10 +109,13 @@ check("skipped prefix command has no effect",
       'echo "$MSH_PREFIX_TEST"\nexit\n',
       "parent\n")
 
-check("built-in prefix rejected for now",
-      "MSH_PREFIX_TEST=temporary pwd\nexit\n",
-      expected_status=2,
-      error="assignments require a standalone foreground assignment-only command or an external")
+check("built-in prefix restores local value and export state",
+      'MSH_PREFIX_TEST=parent\n'
+      'MSH_PREFIX_TEST=temporary pwd > builtin-output\n'
+      'echo "$MSH_PREFIX_TEST"\n'
+      'printenv MSH_PREFIX_TEST\n'
+      'echo $?\nexit\n',
+      "parent\n1\n")
 
 check("pipeline prefix enters stage environment",
       "MSH_PREFIX_TEST=temporary printenv MSH_PREFIX_TEST | cat\nexit\n",
@@ -166,6 +169,36 @@ check("failed final assignment-stage redirection returns failure",
       "true | MSH_PREFIX_TEST=child < missing-stage-input\nexit\n",
       expected_status=1,
       error="missing-stage-input")
+
+
+check("temporary HOME controls cd and is restored",
+      'HOME=/\nHOME=/tmp cd\npwd\necho "$HOME"\nexit\n',
+      "/tmp\n/\n")
+
+check("duplicate built-in prefixes restore original value",
+      'MSH_PREFIX_TEST=parent\n'
+      'MSH_PREFIX_TEST=first MSH_PREFIX_TEST="$MSH_PREFIX_TEST-second" '
+      'export MSH_PREFIX_SECOND="$MSH_PREFIX_TEST"\n'
+      'echo "$MSH_PREFIX_TEST"\nexit\n',
+      "parent\n")
+
+check("failed built-in restores prefixed variable",
+      'MSH_PREFIX_TEST=parent\n'
+      'MSH_PREFIX_TEST=temporary cd /msh-nonexistent-directory\n'
+      'echo $?\necho "$MSH_PREFIX_TEST"\nexit\n',
+      "1\nparent\n", error="/msh-nonexistent-directory")
+
+check("failed built-in redirection preserves original variable",
+      'MSH_PREFIX_TEST=parent\n'
+      'MSH_PREFIX_TEST=temporary pwd < missing-builtin-input\n'
+      'echo $?\necho "$MSH_PREFIX_TEST"\nexit\n',
+      "1\nparent\n", error="missing-builtin-input")
+
+check("built-in prefix restores previously absent variable",
+      'MSH_PREFIX_TEST=temporary pwd > builtin-output\n'
+      'printenv MSH_PREFIX_TEST\necho $?\n'
+      'printf "<%s>\\n" "$MSH_PREFIX_TEST"\nexit\n',
+      "1\n<>\n")
 
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

@@ -42,4 +42,24 @@ int variables_unset(const char *name);
  */
 void variables_clear(void);
 
+/* Opaque saved state for one variable. */
+typedef struct VariableSnapshot VariableSnapshot;
+
+/*
+ * Save shell storage and the environment entry independently.
+ * On success, *snapshot owns an independent copy.
+ * Return 0 on success, -1 on failure.
+ */
+int variables_save(const char *name, VariableSnapshot **snapshot);
+
+/*
+ * Restore the saved state, including absence and export status.
+ * On success, consume the snapshot; do not use it again.
+ * On failure, retain it for retry or disposal.
+ */
+int variables_restore(VariableSnapshot *snapshot);
+
+/* Release a snapshot without changing any variable. */
+void variables_snapshot_free(VariableSnapshot *snapshot);
+
 #endif

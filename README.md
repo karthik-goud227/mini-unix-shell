@@ -366,7 +366,23 @@ unchanged. Redirections apply normally; the example creates an empty
 output file. The shell tracks and reaps the child as a background job.
 Background execution requires an interactive terminal.
 
-Assignment prefixes before built-ins remain unsupported.
+Standalone foreground built-ins support temporary assignment prefixes:
+
+    HOME=/tmp cd
+
+The built-in sees the temporary values. After it returns, affected
+variables regain their original shell values, export flags and environment
+entries, including absence. Other built-in effects remain: the example
+changes directory to /tmp while restoring HOME.
+
+Prefixes apply in source order after successful redirection setup.
+Restoration also occurs after built-in failure. Only prefixed names are
+restored; changes to unrelated variables remain. If a built-in modifies
+a prefixed name itself, that name still regains its original state.
+
+This temporary-prefix behavior applies uniformly to the currently
+supported standalone foreground built-ins. Built-in prefixes in pipelines,
+background commands and background logical chains remain unsupported.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -578,7 +594,7 @@ The current implementation does not support:
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Assignment prefixes before built-ins
+- Built-in assignment prefixes in pipelines, background commands or background logical chains
 - Loops, functions or a scripting language
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
@@ -600,7 +616,7 @@ A normal exit with numeric status 130 does not trigger this newline.
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
 | expansion.c | Quote-aware shell-variable and previous-status expansion |
-| variables.c | Local storage, export status, lookup, removal and cleanup |
+| variables.c | Local storage, export status, lookup, snapshots, restoration and cleanup |
 | assignment.c | Recognition of unquoted assignment prefixes |
 | assignment_exec.c | Ordered assignment-value expansion and application |
 | parser.c | Command-list validation, token ranges, pipelines and redirections |
@@ -631,7 +647,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
 - 17 expansion unit tests.
-- 22 variable-storage checks.
+- 22 variable-storage checks and 14 variable-snapshot checks.
 - 20 assignment-recognition checks.
 - 15 assignment-parser checks.
 - 14 assignment-execution checks.
@@ -642,9 +658,9 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 76 interactive job-control checks using a pseudo-terminal (PTY).
-- 141 non-interactive whole-shell integration tests: 24 general,
+- 146 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
-  14 standalone shell-variable and 24 command-prefix/assignment-stage tests.
+  14 standalone shell-variable and 29 command-prefix/assignment-stage tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -807,3 +823,9 @@ preservation, empty output redirection and completed-job cleanup freed
 all 275 allocations, reported zero memory errors, and left only three
 standard descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.
+
+A built-in prefix Valgrind run covering temporary HOME, local-value and
+export-state restoration, duplicate prefixes, built-in failure and failed
+redirection freed all 721 allocations, reported zero memory errors, and
+left only three standard descriptors open. Child reports were suppressed
+with --child-silent-after-fork=yes; these figures describe the parent shell.

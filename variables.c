@@ -164,3 +164,120 @@ void variables_clear(void)
         free(item);
     }
 }
+
+struct VariableSnapshot {
+    char *name;
+    Variable *saved;
+    char *environment_value;
+};
+
+void variables_snapshot_free(VariableSnapshot *snapshot)
+{
+    if (snapshot == NULL) {
+        return;
+    }
+
+    if (snapshot->saved != NULL) {
+        free(snapshot->saved->name);
+        free(snapshot->saved->value);
+        free(snapshot->saved);
+    }
+    free(snapshot->environment_value);
+    free(snapshot->name);
+    free(snapshot);
+}
+
+int variables_save(const char *name, VariableSnapshot **snapshot)
+{
+    if (snapshot == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+    *snapshot = NULL;
+
+    if (!variables_valid_name(name)) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    VariableSnapshot *copy = calloc(1, sizeof(*copy));
+    if (copy == NULL) {
+        return -1;
+    }
+
+    copy->name = strdup(name);
+    if (copy->name == NULL) {
+        goto fail;
+    }
+
+    Variable *item = find_variable(name);
+    if (item != NULL) {
+        copy->saved = calloc(1, sizeof(*copy->saved));
+        if (copy->saved == NULL) {
+            goto fail;
+        }
+        copy->saved->name = strdup(item->name);
+        copy->saved->value = strdup(item->value);
+        copy->saved->exported = item->exported;
+        if (copy->saved->name == NULL || copy->saved->value == NULL) {
+            goto fail;
+        }
+    }
+
+    const char *environment_value = getenv(name);
+    if (environment_value != NULL) {
+        copy->environment_value = strdup(environment_value);
+        if (copy->environment_value == NULL) {
+            goto fail;
+        }
+    }
+
+    *snapshot = copy;
+    return 0;
+
+fail:
+    {
+        int saved_errno = errno;
+        variables_snapshot_free(copy);
+        errno = saved_errno;
+        return -1;
+    }
+}
+
+int variables_restore(VariableSnapshot *snapshot)
+{
+    if (snapshot == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    int result = snapshot->environment_value != NULL
+        ? setenv(snapshot->name, snapshot->environment_value, 1)
+        : unsetenv(snapshot->name);
+
+    if (result == -1) {
+        return -1;
+    }
+
+    Variable **link = &variables;
+    while (*link != NULL) {
+        Variable *item = *link;
+        if (strcmp(item->name, snapshot->name) == 0) {
+            *link = item->next;
+            free(item->name);
+            free(item->value);
+            free(item);
+            break;
+        }
+        link = &item->next;
+    }
+
+    if (snapshot->saved != NULL) {
+        snapshot->saved->next = variables;
+        variables = snapshot->saved;
+        snapshot->saved = NULL;
+    }
+
+    variables_snapshot_free(snapshot);
+    return 0;
+}

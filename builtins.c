@@ -500,6 +500,71 @@ int is_builtin(const Command *command)
         || strcmp(name, "bg") == 0;
 }
 
+static BuiltinResult run_builtin_with_prefixes(const Command *command,
+                                               int last_status)
+{
+    if (command->argc == 0 || command->assignment_count == 0) {
+        return run_builtin(command, last_status);
+    }
+
+    BuiltinResult result = {.handled = 1, .status = 1};
+    VariableSnapshot **saved =
+        calloc(command->assignment_count, sizeof(*saved));
+    if (saved == NULL) {
+        perror("msh: save assignment variables");
+        return result;
+    }
+
+    size_t count = 0;
+    for (; count < command->assignment_count; count++) {
+        size_t length;
+        if (!assignment_name_length(command->assignments[count], &length)) {
+            fprintf(stderr, "msh: invalid built-in assignment\n");
+            goto discard;
+        }
+
+        char *name = strndup(command->assignments[count], length);
+        if (name == NULL) {
+            perror("msh: save assignment name");
+            goto discard;
+        }
+
+        int status = variables_save(name, &saved[count]);
+        free(name);
+        if (status == -1) {
+            perror("msh: save assignment variable");
+            goto discard;
+        }
+    }
+
+    char error[128];
+    if (assignments_apply(command->assignments, command->assignment_count,
+                          1, last_status, error, sizeof(error)) == -1) {
+        fprintf(stderr, "msh: %s\n", error);
+    } else {
+        result = run_builtin(command, last_status);
+    }
+
+    while (count > 0) {
+        VariableSnapshot *snapshot = saved[--count];
+        if (variables_restore(snapshot) == -1) {
+            perror("msh: restore assignment variable");
+            variables_snapshot_free(snapshot);
+            result.status = 1;
+            result.should_exit = 1;
+        }
+    }
+    free(saved);
+    return result;
+
+discard:
+    while (count > 0) {
+        variables_snapshot_free(saved[--count]);
+    }
+    free(saved);
+    return result;
+}
+
 BuiltinResult run_builtin_redirected(const Command *command,
                                      int last_status)
 {
@@ -516,7 +581,7 @@ BuiltinResult run_builtin_redirected(const Command *command,
     }
 
     if (command->redirection_count == 0) {
-        return run_builtin(command, last_status);
+        return run_builtin_with_prefixes(command, last_status);
     }
 
     BuiltinResult result = {
@@ -543,7 +608,7 @@ BuiltinResult run_builtin_redirected(const Command *command,
     }
 
     if (apply_redirections(command) == 0) {
-        result = run_builtin(command, last_status);
+        result = run_builtin_with_prefixes(command, last_status);
     }
 
     /*
