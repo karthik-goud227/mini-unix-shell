@@ -113,7 +113,8 @@ among the jobs currently listed.
   Invalid arguments report an error and keep the shell running.
 - `jobs`: lists tracked jobs; accepts no arguments.
 - `stats`: displays saved completed-job statistics; accepts no arguments.
-- `export NAME=value`: sets or replaces one environment variable.
+- `export NAME=value`: sets or replaces a variable and exports it.
+- `export NAME`: exports an existing variable without changing its value.
 - `unset NAME`: removes one environment variable.
 - `history`: displays retained commands from oldest to newest.
 - `history -c`: clears command history and restarts numbering.
@@ -296,7 +297,8 @@ commands return 0 and do not create a job.
 For now, assignment execution is limited to standalone foreground
 assignment-only commands. Command prefixes such as NAME=value command,
 pipeline assignments and background assignments remain unsupported.
-export NAME without a value is also not implemented yet.
+export NAME exports an existing local or inherited variable.
+Exporting a missing variable currently reports an error and returns 1.
 
 ## Environment built-ins
 
@@ -342,10 +344,14 @@ operational failures return 1. Changes affect this shell and future
 children, not its parent terminal shell or already-running children.
 The commands do not write persistent configuration.
 
-The export and unset built-ins each accept one operand. This version
-does not support export without an assignment, environment listing
-through export, or export/unset options. Multiple local assignments
-in one assignment-only command are supported separately.
+The export and unset built-ins each accept one operand. export accepts
+NAME=value or an existing NAME. Repeatedly exporting an existing
+variable succeeds, including when its value is empty. Invalid names
+return 2; exporting a missing variable returns 1.
+
+Environment listing through export and export/unset options remain
+unsupported. Multiple local assignments in one assignment-only
+command are supported separately.
 
 ## Command history
 
@@ -566,8 +572,8 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 60 interactive job-control checks using a pseudo-terminal (PTY).
-- 110 non-interactive whole-shell integration tests: 24 general,
-  34 command-list, 11 expansion, 10 statistics, 17 environment
+- 117 non-interactive whole-shell integration tests: 24 general,
+  34 command-list, 11 expansion, 10 statistics, 24 environment
   and 14 standalone shell-variable tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
@@ -674,6 +680,11 @@ A standalone shell-variable Valgrind run covering local assignment,
 ordered expansion, export, reassignment, removal, empty values and
 failed redirection freed all 503 allocations, reported zero memory
 errors, and left only three standard descriptors open.
+
+An existing-variable export Valgrind run covering local-value export,
+repeated export, reassignment, removal, missing variables and invalid
+names freed all 411 allocations, reported zero memory errors, and
+left only three standard descriptors open.
 
 These results cover the exercised scenarios, not every possible failure.
 

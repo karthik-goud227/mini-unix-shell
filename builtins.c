@@ -104,7 +104,7 @@ static int valid_environment_name(const char *name, size_t length)
 static int builtin_export(const Command *command)
 {
     if (command->argc != 2) {
-        fprintf(stderr, "msh: export: usage: export NAME=value\n");
+        fprintf(stderr, "msh: export: usage: export NAME or export NAME=value\n");
         return 2;
     }
 
@@ -112,8 +112,22 @@ static int builtin_export(const Command *command)
     const char *equals = strchr(assignment, '=');
 
     if (equals == NULL) {
-        fprintf(stderr, "msh: export: expected NAME=value\n");
-        return 2;
+        if (!variables_valid_name(assignment)) {
+            fprintf(stderr, "msh: export: invalid variable name\n");
+            return 2;
+        }
+
+        if (variables_export(assignment) == -1) {
+            if (errno == ENOENT) {
+                fprintf(stderr, "msh: export: variable is not set: %s\n",
+                        assignment);
+            } else {
+                perror("msh: export");
+            }
+            return 1;
+        }
+
+        return 0;
     }
 
     size_t length = (size_t)(equals - assignment);

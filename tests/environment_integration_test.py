@@ -95,10 +95,10 @@ with tempfile.TemporaryDirectory(prefix="msh-environment-") as workdir:
         error="export: invalid variable name",
     )
     check(
-        "export requires equals sign",
+        "export of missing variable reports failure",
         "export MSH_ENV_TEST\nexit\n",
-        expected_status=2,
-        error="export: expected NAME=value",
+        expected_status=1,
+        error="export: variable is not set:",
     )
     check(
         "export rejects multiple assignments",
@@ -157,6 +157,51 @@ with tempfile.TemporaryDirectory(prefix="msh-environment-") as workdir:
         "printenv MSH_ENV_TEST\nexit\n",
         "old\n",
         error="unset is not supported in a pipeline or background job",
+    )
+
+
+    check(
+        "export existing local variable",
+        "MSH_ENV_TEST=hello\nexport MSH_ENV_TEST\n"
+        "printenv MSH_ENV_TEST\nexit\n",
+        "hello\n",
+    )
+    check(
+        "export existing empty local value",
+        "MSH_ENV_TEST=\nexport MSH_ENV_TEST\n"
+        "printenv MSH_ENV_TEST\nexit\n",
+        "\n",
+    )
+    check(
+        "export preserves existing spaces",
+        'MSH_ENV_TEST="hello world"\nexport MSH_ENV_TEST\n'
+        'printenv MSH_ENV_TEST\nexit\n',
+        "hello world\n",
+    )
+    check(
+        "repeated export succeeds",
+        "MSH_ENV_TEST=hello\nexport MSH_ENV_TEST\n"
+        "export MSH_ENV_TEST\nprintenv MSH_ENV_TEST\nexit\n",
+        "hello\n",
+    )
+    check(
+        "reassignment after name-only export stays exported",
+        "MSH_ENV_TEST=first\nexport MSH_ENV_TEST\n"
+        "MSH_ENV_TEST=second\nprintenv MSH_ENV_TEST\nexit\n",
+        "second\n",
+    )
+    check(
+        "name-only export rejects invalid name",
+        "export 1BAD\nexit\n",
+        expected_status=2,
+        error="export: invalid variable name",
+    )
+    check(
+        "failed redirection prevents name-only export",
+        "MSH_ENV_TEST=local\nexport MSH_ENV_TEST < missing-export-input\n"
+        "printenv MSH_ENV_TEST\nexit\n",
+        expected_status=1,
+        error="missing-export-input",
     )
 
 print(f"\nTests: {total}, failures: {failures}")
