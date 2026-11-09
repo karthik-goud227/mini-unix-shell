@@ -2,6 +2,7 @@
 
 #include "builtins.h"
 #include "variables.h"
+#include "parameters.h"
 #include "chain.h"
 #include "executor.h"
 #include "expansion.h"
@@ -23,12 +24,7 @@
 
 int main(int argc, char **argv)
 {
-    if (argc > 2) {
-        fprintf(stderr, "msh: usage: msh [script-file]\n");
-        return 2;
-    }
-
-    int script_mode = argc == 2;
+    int script_mode = argc >= 2;
     int input_fd = STDIN_FILENO;
 
     if (script_mode) {
@@ -59,6 +55,21 @@ int main(int argc, char **argv)
     }
 
     if (signals_init() == -1) {
+        terminal_reclaim();
+        if (script_mode) {
+            close(input_fd);
+        }
+        return EXIT_FAILURE;
+    }
+
+    const char *parameter_zero = script_mode ? argv[1] : argv[0];
+    size_t parameter_count = script_mode ? (size_t)(argc - 2) : 0;
+    char **parameter_arguments = script_mode ? argv + 2 : NULL;
+
+    if (parameters_set(parameter_zero, parameter_count,
+                       parameter_arguments) == -1) {
+        perror("msh: initialize parameters");
+        signals_close();
         terminal_reclaim();
         if (script_mode) {
             close(input_fd);
@@ -293,6 +304,7 @@ int main(int argc, char **argv)
 
     jobs_shutdown();
     variables_clear();
+    parameters_clear();
     history_clear();
     signals_close();
 

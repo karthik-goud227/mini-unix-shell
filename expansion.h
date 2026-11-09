@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 /*
- * Expand $NAME and $? in word tokens using their original spelling.
+ * Expand $NAME, $?, $0-$9 and $# using original word spelling.
  * Single quotes and escaped dollar signs prevent expansion.
  *
  * Each word remains one token: no field splitting or wildcard expansion.

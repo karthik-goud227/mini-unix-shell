@@ -1,5 +1,6 @@
 #include "expansion.h"
 #include "variables.h"
+#include "parameters.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -93,6 +94,26 @@ static char *expand_word(const char *raw, int last_status)
             char number[32];
             snprintf(number, sizeof(number), "%d", last_status);
 
+            if (append(&out, &used, number, strlen(number)) == -1) {
+                goto fail;
+            }
+            i += 2;
+            continue;
+        }
+
+        if (c == '$' && raw[i + 1] >= '0' && raw[i + 1] <= '9') {
+            size_t index = (size_t)(raw[i + 1] - '0');
+            const char *value = parameters_get(index);
+            if (append(&out, &used, value, strlen(value)) == -1) {
+                goto fail;
+            }
+            i += 2;
+            continue;
+        }
+
+        if (c == '$' && raw[i + 1] == '#') {
+            char number[32];
+            snprintf(number, sizeof(number), "%zu", parameters_count());
             if (append(&out, &used, number, strlen(number)) == -1) {
                 goto fail;
             }

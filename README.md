@@ -64,11 +64,28 @@ interactive job-control built-ins remain unavailable in script mode.
 An empty script returns 0. Otherwise, the last executed command determines
 the status unless exit supplies one explicitly. A final line without a
 newline is accepted. Missing scripts and directory paths return 1.
-Extra arguments currently return usage status 2.
+Script arguments are accepted:
+
+    ./msh commands.msh "hello world" ""
+
+Inside the script, $0 is the script filename as supplied, $1 through $9
+select individual arguments, and $# gives the number of arguments,
+excluding $0. Empty arguments count and retain their empty values.
+Missing arguments expand to an empty string.
+
+Without a script, $0 is the shell invocation name and $# is zero.
+Arguments are stored as independent copies, separate from named variables.
+Single quotes and escaped dollar signs prevent positional expansion;
+double quotes allow it. Inserted argument contents are not parsed again.
+
+Unbraced positional references consume one digit: $10 means $1 followed
+by literal 0. Braced multi-digit references such as ${10}, and argument
+list expansions $@ and $*, are not supported yet. Expansion still keeps
+each word as one argument; field splitting remains unimplemented.
 
 This milestone supports existing single-line command syntax in files.
-Positional parameters, script options, comments/shebang handling,
-multiline constructs and control-flow statements are not implemented yet.
+Script options, comments/shebang handling, multiline constructs and
+control-flow statements are not implemented yet.
 Script error handling currently follows the existing command loop;
 full paper-style script error and signal policies remain future work.
 The script descriptor is marked close-on-exec and closed during shutdown.
@@ -286,9 +303,9 @@ All `$?` references within one pipeline use the status from before
 that pipeline. A later executed list item sees the status left by
 the last executed item; skipped items leave that status unchanged.
 
-Only `$NAME` and `$?` are supported. Braced expansion such as `${HOME}`,
-positional parameters such as `$1`, and special parameters such as `$$`
-are not implemented. Standalone foreground assignments such as
+Supported expansions are `$NAME`, `$?`, `$0` through `$9`, and `$#`.
+Braced expansion such as `${HOME}` and special parameters such as `$$`,
+`$!`, `$@` and `$*` are not implemented. Standalone foreground assignments such as
 NAME=value are supported. Temporary assignment prefixes are supported
 on external commands and pipeline stages, in foreground or background
 execution: NAME=value command.
@@ -644,7 +661,7 @@ The current implementation does not support:
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
 - Built-ins other than pwd in pipelines or standalone background commands
-- Loops, functions, positional parameters or multiline script constructs
+- Loops, functions, argument-list expansion or multiline script constructs
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
@@ -664,7 +681,8 @@ A normal exit with numeric status 130 does not trigger this newline.
 | input.c | Bounded descriptor-based input and poll-based event waiting |
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
-| expansion.c | Quote-aware shell-variable and previous-status expansion |
+| expansion.c | Quote-aware variable, status and positional-parameter expansion |
+| parameters.c | Owned positional arguments, parameter zero, count and cleanup |
 | variables.c | Local storage, export status, lookup, snapshots, restoration and cleanup |
 | assignment.c | Recognition of unquoted assignment prefixes |
 | assignment_exec.c | Ordered assignment-value expansion and application |
@@ -695,7 +713,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 10 chain-pipeline checks and 28 chain-evaluation checks.
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
-- 17 expansion unit tests.
+- 17 expansion unit tests and 18 positional-parameter storage checks.
 - 22 variable-storage checks and 14 variable-snapshot checks.
 - 20 assignment-recognition checks.
 - 15 assignment-parser checks.
@@ -707,10 +725,10 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 81 interactive job-control checks using a pseudo-terminal (PTY).
-- 161 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 166 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
-  and 14 script checks. One script check uses a pseudo-terminal on stdin.
+  and 19 script checks. One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -898,3 +916,9 @@ allocations, reported zero memory errors, and left only three standard
 descriptors open. The script descriptor was closed. Child reports were
 suppressed with --child-silent-after-fork=yes; these figures describe
 the parent shell.
+
+A positional-parameter Valgrind run covering script identity, argument
+count, spaced and empty arguments, assignment expansion and pipeline use
+freed all 291 allocations, reported zero memory errors, and left only
+three standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.

@@ -9,7 +9,7 @@ failures = 0
 
 
 def check(name, text, expected_out="", expected_status=0,
-          stdin="", error=None):
+          stdin="", error=None, arguments=()):
     global checks, failures
     checks += 1
 
@@ -18,7 +18,7 @@ def check(name, text, expected_out="", expected_status=0,
         script.write_text(text)
         try:
             result = subprocess.run(
-                [str(shell), str(script)],
+                [str(shell), str(script), *arguments],
                 input=stdin, text=True, capture_output=True,
                 cwd=directory, timeout=10,
             )
@@ -76,8 +76,6 @@ with tempfile.TemporaryDirectory(prefix="msh-script-errors-") as directory:
          [str(work / "missing.msh")], 1, "missing.msh"),
         ("directory script rejected",
          [str(work)], 1, "script is a directory"),
-        ("extra arguments rejected for now",
-         [str(script), "argument"], 2, "usage: msh [script-file]"),
     ]
 
     for name, arguments, expected_status, error in cases:
@@ -127,6 +125,35 @@ with tempfile.TemporaryDirectory(prefix="msh-script-terminal-") as directory:
     finally:
         os.close(slave)
         os.close(master)
+
+
+check("script arguments preserve spaces and empty values",
+      'printf "<%s>|<%s>|<%s>\\n" "$1" "$2" "$3"\n',
+      "<hello world>|<>|<third>\n",
+      arguments=("hello world", "", "third"))
+
+check("argument count and missing parameter",
+      'printf "%s:<%s>\\n" "$#" "$1"\n',
+      "0:<>\n")
+
+check("ninth parameter and single-digit parsing",
+      'printf "%s:%s:%s\\n" "$#" "$9" "$10"\n',
+      "10:nine:one0\n",
+      arguments=("one", "two", "three", "four", "five",
+                 "six", "seven", "eight", "nine", "ten"))
+
+check("argument contents remain literal data",
+      'printf "%s\\n" "$1"\n',
+      "$HOME; echo forbidden\n",
+      arguments=("$HOME; echo forbidden",))
+
+check("quotes and escapes control positional expansion",
+      "printf '%s|%s|%s\\n' '$1' \"$1\" \\$1\n",
+      "$1|value|$1\n", arguments=("value",))
+
+check("positional parameters expand inside assignments",
+      'MSH_SCRIPT_VALUE="$1"; echo "$MSH_SCRIPT_VALUE"; echo "$#"\n',
+      "assigned value\n1\n", arguments=("assigned value",))
 
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)
