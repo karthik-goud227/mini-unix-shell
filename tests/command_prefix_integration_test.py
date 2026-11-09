@@ -200,5 +200,13 @@ check("built-in prefix restores previously absent variable",
       'printf "<%s>\\n" "$MSH_PREFIX_TEST"\nexit\n',
       "1\n<>\n")
 
+
+check("prefixed pwd pipeline preserves parent variable",
+      'cd /\nMSH_PREFIX_TEST=parent\n'
+      'MSH_PREFIX_TEST=temporary pwd | cat\n'
+      'echo "$MSH_PREFIX_TEST"\n'
+      'printenv MSH_PREFIX_TEST\necho $?\nexit\n',
+      "/\nparent\n1\n")
+
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

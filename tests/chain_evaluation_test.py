@@ -169,6 +169,14 @@ cases.extend([
      "supervisor\nkept\n", 0),
 ])
 
+
+cases.extend([
+    ("prefixed pwd pipeline preserves supervisor variable",
+     'cd / && MSH_CHAIN_VALUE=temporary pwd | cat && '
+     'echo "$MSH_CHAIN_VALUE"',
+     "/\nparent\n", 0),
+])
+
 failures = 0
 
 with tempfile.TemporaryDirectory(prefix="msh-chain-evaluation-") as directory:

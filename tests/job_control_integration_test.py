@@ -685,6 +685,49 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
             "\n1\n" in output,
         )
 
+        command("unset MSH_PWD_PREFIX_TEST")
+        command("MSH_PWD_PREFIX_TEST=parent")
+        output = command(
+            "MSH_PWD_PREFIX_TEST=temporary pwd > pwd-prefix-output &"
+        )
+
+        launch = re.search(r"\[(\d+)\]\s+(\d+)", output)
+        check("prefixed background pwd launches", launch is not None)
+        if launch is None:
+            raise RuntimeError(f"Missing prefixed pwd job: {output!r}")
+        background_groups.add(int(launch.group(2)))
+
+        check(
+            "prefixed background pwd preserves terminal ownership",
+            os.tcgetpgrp(terminal) == pid,
+        )
+
+        result_path = Path(workdir) / "pwd-prefix-output"
+        expected = str(Path(workdir).resolve()) + "\n"
+        deadline = time.monotonic() + 10
+        contents = ""
+        while time.monotonic() < deadline:
+            if result_path.exists():
+                contents = result_path.read_text()
+                if contents == expected:
+                    break
+            time.sleep(0.02)
+
+        check("prefixed background pwd writes directory", contents == expected)
+
+        output = command('echo "$MSH_PWD_PREFIX_TEST"')
+        check(
+            "prefixed background pwd preserves parent value",
+            "\nparent\n" in output,
+        )
+
+        command("printenv MSH_PWD_PREFIX_TEST")
+        output = command("echo $?")
+        check(
+            "prefixed background pwd preserves parent export state",
+            "\n1\n" in output,
+        )
+
         send("exit 0\n")
         deadline = time.monotonic() + 10
 

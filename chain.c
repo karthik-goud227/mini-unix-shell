@@ -458,7 +458,8 @@ static int chain_evaluate(const TokenList *tokens,
             const Command *command = &pipeline.commands[stage];
             if (command->assignment_count > 0
                 && command->argc > 0 && is_builtin(command)
-                && (pipeline.command_count != 1 || pipeline.background)) {
+                && (pipeline.command_count != 1 || pipeline.background)
+                    && strcmp(command->argv[0], "pwd") != 0) {
                 unsupported_assignment = 1;
             }
         }

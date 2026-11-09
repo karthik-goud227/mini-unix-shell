@@ -396,8 +396,15 @@ For example:
 This prints /tmp followed by the supervisor's original HOME. The parent
 shell's directory and variables remain unchanged. Existing restrictions
 on jobs, fg, bg, stats and history inside chains still apply.
-Built-in prefixes in pipelines and standalone background commands remain
-unsupported.
+The pwd built-in also accepts assignment prefixes when running as a
+pipeline stage or standalone background command:
+
+    MSH_DEMO=temporary pwd | cat
+    MSH_DEMO=temporary pwd > pwd-output &
+
+Prefixes apply inside the child and leave parent and supervisor variables
+unchanged. This also works for pwd stages inside background logical chains.
+Other built-ins retain their existing pipeline and background restrictions.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -609,7 +616,7 @@ The current implementation does not support:
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Built-in assignment prefixes in pipelines or standalone background commands
+- Built-ins other than pwd in pipelines or standalone background commands
 - Loops, functions or a scripting language
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
@@ -658,7 +665,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 job-state and resource-lifecycle checks.
 - 6 fork-isolation checks for inherited job records.
 - 8 chain-wait checks, 3 stop/resume checks and 9 token-copy checks.
-- 10 chain-pipeline checks and 27 chain-evaluation checks.
+- 10 chain-pipeline checks and 28 chain-evaluation checks.
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
 - 17 expansion unit tests.
@@ -672,10 +679,10 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 76 interactive job-control checks using a pseudo-terminal (PTY).
-- 146 non-interactive whole-shell integration tests: 24 general,
+- 81 interactive job-control checks using a pseudo-terminal (PTY).
+- 147 non-interactive whole-shell integration tests: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
-  14 standalone shell-variable and 29 command-prefix/assignment-stage tests.
+  14 standalone shell-variable and 30 command-prefix/assignment-stage tests.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -849,4 +856,10 @@ A chain built-in prefix Valgrind run covering temporary HOME, restored
 supervisor state, parent-directory isolation and completed-job cleanup
 freed all 197 allocations, reported zero memory errors, and left only
 three standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.
+
+A pwd child-prefix Valgrind run covering pipeline and background execution,
+parent-value preservation and completed-job cleanup freed all 348
+allocations, reported zero memory errors, and left only three standard
+descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.
