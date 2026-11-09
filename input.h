@@ -17,4 +17,7 @@
  */
 int input_read_line(char **line, size_t *capacity);
 
+/* Same contract, reading from a borrowed descriptor; does not close it. */
+int input_read_line_fd(int fd, char **line, size_t *capacity);
+
 #endif

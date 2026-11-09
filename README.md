@@ -45,6 +45,33 @@ make
 ```
 
 Run these commands from the repository directory.
+
+## Script-file execution
+
+Run commands from a file:
+
+    ./msh commands.msh
+
+The shell reads commands from a separate descriptor, leaving standard
+input available to commands inside the script. For example, a cat command
+reads the caller's standard input, not the remaining script text.
+Command redirections do not change the shell's script input.
+
+Script mode shows no prompts and records no interactive command history,
+even when standard input is a terminal. Background execution and
+interactive job-control built-ins remain unavailable in script mode.
+
+An empty script returns 0. Otherwise, the last executed command determines
+the status unless exit supplies one explicitly. A final line without a
+newline is accepted. Missing scripts and directory paths return 1.
+Extra arguments currently return usage status 2.
+
+This milestone supports existing single-line command syntax in files.
+Positional parameters, script options, comments/shebang handling,
+multiline constructs and control-flow statements are not implemented yet.
+Script error handling currently follows the existing command loop;
+full paper-style script error and signal policies remain future work.
+The script descriptor is marked close-on-exec and closed during shutdown.
 Type commands at the `msh>` prompt.
 
 To remove generated executables and object files:
@@ -617,7 +644,7 @@ The current implementation does not support:
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
 - Built-ins other than pwd in pipelines or standalone background commands
-- Loops, functions or a scripting language
+- Loops, functions, positional parameters or multiline script constructs
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
@@ -633,8 +660,8 @@ A normal exit with numeric status 130 does not trigger this newline.
 
 | Module | Responsibility |
 | --- | --- |
-| main.c | Initialization, conditional list execution, status and shutdown |
-| input.c | Bounded input and poll-based event waiting |
+| main.c | Initialization, script-file selection, conditional list execution, status and shutdown |
+| input.c | Bounded descriptor-based input and poll-based event waiting |
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
 | expansion.c | Quote-aware shell-variable and previous-status expansion |
@@ -680,9 +707,10 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 81 interactive job-control checks using a pseudo-terminal (PTY).
-- 147 non-interactive whole-shell integration tests: 24 general,
+- 161 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
-  14 standalone shell-variable and 30 command-prefix/assignment-stage tests.
+  14 standalone shell-variable, 30 command-prefix/assignment-stage
+  and 14 script checks. One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -863,3 +891,10 @@ parent-value preservation and completed-job cleanup freed all 348
 allocations, reported zero memory errors, and left only three standard
 descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.
+
+A script-file Valgrind run covering variable assignment, separate command
+stdin, redirection, command status and explicit exit freed all 209
+allocations, reported zero memory errors, and left only three standard
+descriptors open. The script descriptor was closed. Child reports were
+suppressed with --child-silent-after-fork=yes; these figures describe
+the parent shell.

@@ -39,9 +39,9 @@ int terminal_is_interactive(void)
     return interactive;
 }
 
-int terminal_init(void)
+int terminal_init_mode(int allow_interactive)
 {
-    interactive = isatty(STDIN_FILENO);
+    interactive = allow_interactive && isatty(STDIN_FILENO);
 
     if (!interactive) {
         return 0;
@@ -155,4 +155,9 @@ int terminal_prepare_child(void)
     }
 
     return 0;
+}
+
+int terminal_init(void)
+{
+    return terminal_init_mode(1);
 }

@@ -13,18 +13,56 @@
 #include "signals.h"
 #include "terminal.h"
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int main(void)
+int main(int argc, char **argv)
 {
-    if (terminal_init() == -1) {
+    if (argc > 2) {
+        fprintf(stderr, "msh: usage: msh [script-file]\n");
+        return 2;
+    }
+
+    int script_mode = argc == 2;
+    int input_fd = STDIN_FILENO;
+
+    if (script_mode) {
+        input_fd = open(argv[1], O_RDONLY | O_CLOEXEC);
+        if (input_fd == -1) {
+            perror(argv[1]);
+            return EXIT_FAILURE;
+        }
+
+        struct stat info;
+        if (fstat(input_fd, &info) == -1) {
+            perror("msh: inspect script");
+            close(input_fd);
+            return EXIT_FAILURE;
+        }
+        if (S_ISDIR(info.st_mode)) {
+            fprintf(stderr, "msh: script is a directory: %s\n", argv[1]);
+            close(input_fd);
+            return EXIT_FAILURE;
+        }
+    }
+
+    if (terminal_init_mode(!script_mode) == -1) {
+        if (script_mode) {
+            close(input_fd);
+        }
         return EXIT_FAILURE;
     }
 
     if (signals_init() == -1) {
         terminal_reclaim();
+        if (script_mode) {
+            close(input_fd);
+        }
         return EXIT_FAILURE;
     }
 
@@ -42,7 +80,7 @@ int main(void)
             fflush(stdout);
         }
 
-        int input_result = input_read_line(&line, &capacity);
+        int input_result = input_read_line_fd(input_fd, &line, &capacity);
 
         if (input_result == -3) {
             status = 130;
@@ -260,6 +298,10 @@ int main(void)
 
     if (terminal_reclaim() == -1) {
         status = EXIT_FAILURE;
+    }
+
+    if (script_mode) {
+        close(input_fd);
     }
 
     free(line);

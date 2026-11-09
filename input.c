@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-int input_read_line(char **line, size_t *capacity)
+int input_read_line_fd(int fd, char **line, size_t *capacity)
 {
     if (*capacity < MSH_MAX_LINE + 1) {
         char *grown = realloc(*line, MSH_MAX_LINE + 1);
@@ -42,7 +42,7 @@ int input_read_line(char **line, size_t *capacity)
 
         struct pollfd descriptors[2] = {
             {
-                .fd = STDIN_FILENO,
+                .fd = fd,
                 .events = POLLIN
             },
             {
@@ -79,7 +79,7 @@ int input_read_line(char **line, size_t *capacity)
         }
 
         char byte;
-        ssize_t count = read(STDIN_FILENO, &byte, 1);
+        ssize_t count = read(fd, &byte, 1);
 
         if (count == -1) {
             if (errno == EINTR) {
@@ -124,4 +124,9 @@ int input_read_line(char **line, size_t *capacity)
             (*line)[used++] = byte;
         }
     }
+}
+
+int input_read_line(char **line, size_t *capacity)
+{
+    return input_read_line_fd(STDIN_FILENO, line, capacity);
 }
