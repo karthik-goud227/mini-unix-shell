@@ -381,8 +381,23 @@ restored; changes to unrelated variables remain. If a built-in modifies
 a prefixed name itself, that name still regains its original state.
 
 This temporary-prefix behavior applies uniformly to the currently
-supported standalone foreground built-ins. Built-in prefixes in pipelines,
-background commands and background logical chains remain unsupported.
+supported standalone foreground built-ins. It also applies to standalone
+built-ins permitted inside background logical chains.
+
+Inside a chain, prefixes temporarily modify the supervisor's variables.
+After the built-in returns, the supervisor's original variable state is
+restored. Other effects, such as changing the supervisor's directory or
+modifying unrelated variables, remain confined to that supervisor.
+
+For example:
+
+    HOME=/tmp cd && pwd && echo "$HOME" &
+
+This prints /tmp followed by the supervisor's original HOME. The parent
+shell's directory and variables remain unchanged. Existing restrictions
+on jobs, fg, bg, stats and history inside chains still apply.
+Built-in prefixes in pipelines and standalone background commands remain
+unsupported.
 export NAME exports an existing local or inherited variable.
 Exporting a missing variable currently reports an error and returns 1.
 
@@ -594,7 +609,7 @@ The current implementation does not support:
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Built-in assignment prefixes in pipelines, background commands or background logical chains
+- Built-in assignment prefixes in pipelines or standalone background commands
 - Loops, functions or a scripting language
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
@@ -643,7 +658,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 job-state and resource-lifecycle checks.
 - 6 fork-isolation checks for inherited job records.
 - 8 chain-wait checks, 3 stop/resume checks and 9 token-copy checks.
-- 10 chain-pipeline checks and 23 chain-evaluation checks.
+- 10 chain-pipeline checks and 27 chain-evaluation checks.
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
 - 17 expansion unit tests.
@@ -829,3 +844,9 @@ export-state restoration, duplicate prefixes, built-in failure and failed
 redirection freed all 721 allocations, reported zero memory errors, and
 left only three standard descriptors open. Child reports were suppressed
 with --child-silent-after-fork=yes; these figures describe the parent shell.
+
+A chain built-in prefix Valgrind run covering temporary HOME, restored
+supervisor state, parent-directory isolation and completed-job cleanup
+freed all 197 allocations, reported zero memory errors, and left only
+three standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.

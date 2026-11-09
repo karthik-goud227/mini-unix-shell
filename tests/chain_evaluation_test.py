@@ -146,6 +146,29 @@ cases.extend([
      "", 1),
 ])
 
+
+cases.extend([
+    ("chain temporary HOME controls cd and is restored",
+     'HOME=/ && HOME=/tmp cd && pwd && echo "$HOME"',
+     "/tmp\n/\n", 0),
+    ("chain built-in prefix restores local export state",
+     'unset MSH_CHAIN_VALUE && MSH_CHAIN_VALUE=supervisor && '
+     'MSH_CHAIN_VALUE=temporary pwd > /dev/null && '
+     'echo "$MSH_CHAIN_VALUE"; printenv MSH_CHAIN_VALUE; echo $?',
+     "supervisor\n1\n", 0),
+    ("chain built-in prefix restores absent variable",
+     'unset MSH_CHAIN_VALUE && '
+     'MSH_CHAIN_VALUE=temporary pwd > /dev/null && '
+     'printf "<%s>\\n" "$MSH_CHAIN_VALUE"; '
+     'printenv MSH_CHAIN_VALUE; echo $?',
+     "<>\n1\n", 0),
+    ("chain built-in prefix preserves unrelated changes",
+     'MSH_CHAIN_VALUE=supervisor && '
+     'MSH_CHAIN_VALUE=temporary export MSH_CHAIN_OTHER=kept && '
+     'echo "$MSH_CHAIN_VALUE" && printenv MSH_CHAIN_OTHER',
+     "supervisor\nkept\n", 0),
+])
+
 failures = 0
 
 with tempfile.TemporaryDirectory(prefix="msh-chain-evaluation-") as directory:
