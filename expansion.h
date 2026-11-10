@@ -8,11 +8,12 @@
 /*
  * Expand $NAME, $?, $0-$9 and $# using original word spelling.
  * Braces support names, numeric indices, status and argument count.
- * Named-variable defaults ${NAME-word} expand word only when unset.
+ * Defaults ${NAME-word} and ${1-word} expand word only when unset.
  * ${NAME=word} also assigns the expanded default when NAME is unset.
+ * Assignment to positional parameters is rejected.
  * Existing empty values are preserved. The '-' form does not assign.
- * ${NAME?message} fails when NAME is unset; set empty values are valid.
- * Its message expands only when needed. Other operators remain unsupported.
+ * ${NAME?message} and ${1?message} fail when the parameter is unset.
+ * Messages expand only when needed. Other operators remain unsupported.
  * Single quotes and escaped dollar signs prevent expansion.
  *
  * Each word remains one token: no field splitting or wildcard expansion.

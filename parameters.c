@@ -31,6 +31,11 @@ void parameters_clear(void)
     argument_count = 0;
 }
 
+int parameters_is_set(size_t index)
+{
+    return values != NULL && index <= argument_count;
+}
+
 size_t parameters_count(void)
 {
     return argument_count;

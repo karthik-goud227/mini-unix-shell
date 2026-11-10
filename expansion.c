@@ -175,9 +175,23 @@ static char *expand_word(const char *raw, int last_status,
             }
 
             size_t name_end = start;
+            int positional = raw[start] >= '0' && raw[start] <= '9';
+            size_t positional_index = 0;
+
             if (name_start(raw[start])) {
                 name_end++;
                 while (name_end < end && name_char(raw[name_end])) {
+                    name_end++;
+                }
+            } else if (positional) {
+                while (name_end < end
+                       && raw[name_end] >= '0' && raw[name_end] <= '9') {
+                    size_t digit = (size_t)(raw[name_end] - '0');
+                    if (positional_index > (SIZE_MAX - digit) / 10) {
+                        failure->message = "positional parameter index is too large";
+                        goto fail;
+                    }
+                    positional_index = positional_index * 10 + digit;
                     name_end++;
                 }
             }
@@ -187,6 +201,10 @@ static char *expand_word(const char *raw, int last_status,
                     || raw[name_end] == '?')) {
                 int assign_default = raw[name_end] == '=';
                 int require_value = raw[name_end] == '?';
+                if (positional && assign_default) {
+                    failure->message = "invalid braced positional parameter";
+                    goto fail;
+                }
                 size_t name_length = name_end - start;
                 char *name = malloc(name_length + 1);
                 if (name == NULL) {
@@ -194,7 +212,10 @@ static char *expand_word(const char *raw, int last_status,
                 }
                 memcpy(name, raw + start, name_length);
                 name[name_length] = '\0';
-                const char *existing = variables_get(name);
+                const char *existing = positional
+                    ? (parameters_is_set(positional_index)
+                       ? parameters_get(positional_index) : NULL)
+                    : variables_get(name);
 
                 if (existing != NULL) {
                     int result = append(&out, &used, existing, strlen(existing));

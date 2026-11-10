@@ -18,6 +18,9 @@ int parameters_set(const char *zero, size_t count,
  */
 const char *parameters_get(size_t index);
 
+/* Return 1 when the parameter exists, including an empty value. */
+int parameters_is_set(size_t index);
+
 /* Number of arguments, excluding parameter zero. */
 size_t parameters_count(void);
 

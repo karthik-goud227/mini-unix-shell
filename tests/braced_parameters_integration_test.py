@@ -184,5 +184,39 @@ check("required failure prevents remaining list execution",
       'echo also-forbidden\n',
       status=1, error="MSH_BRACE_TEST: stop here")
 
+
+check("missing positional parameter uses default",
+      'echo "${1-fallback}"\n', "fallback\n")
+
+check("empty positional parameter does not use default",
+      'printf "<%s>\\n" "${1-fallback}"\n',
+      "<>\n", arguments=("",))
+
+check("set positional parameter skips invalid fallback",
+      'echo "${1-${1bad}}"\n',
+      "kept\n", arguments=("kept",))
+
+check("positional default expands another argument",
+      'echo "${2-$1}"\n',
+      "first value\n", arguments=("first value",))
+
+check("missing required argument terminates script",
+      'echo "${1?missing argument}"\necho forbidden\n',
+      status=1, error="1: missing argument")
+
+check("empty required argument is accepted",
+      'printf "<%s>\\n" "${1?missing argument}"\n',
+      "<>\n", arguments=("",))
+
+check("multi-digit positional operators",
+      'printf "%s|%s\\n" "${10-fallback}" "${10?missing tenth}"\n',
+      "ten|ten\n",
+      arguments=("one", "two", "three", "four", "five",
+                 "six", "seven", "eight", "nine", "ten"))
+
+check("nested positional required failure propagates",
+      'echo "${2-${1?first argument required}}"\necho forbidden\n',
+      status=1, error="1: first argument required")
+
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

@@ -17,6 +17,7 @@ static void check(const char *name, int passed)
 int main(void)
 {
     check("initial argument count is zero", parameters_count() == 0);
+    check("uninitialized parameter zero is absent", !parameters_is_set(0));
     check("initial parameter is empty", strcmp(parameters_get(0), "") == 0);
 
     char zero[] = "demo.msh";
@@ -26,6 +27,10 @@ int main(void)
     check("parameter setup succeeds",
           parameters_set(zero, 3, arguments) == 0);
     check("count excludes parameter zero", parameters_count() == 3);
+    check("parameter zero is present", parameters_is_set(0));
+    check("empty argument is present", parameters_is_set(2));
+    check("missing argument is absent",
+          !parameters_is_set(4) && !parameters_is_set(SIZE_MAX));
     check("parameter zero is script name",
           strcmp(parameters_get(0), "demo.msh") == 0);
     check("spaces preserved in argument",

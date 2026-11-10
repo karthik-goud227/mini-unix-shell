@@ -360,9 +360,20 @@ Non-interactive execution terminates with status 1; an interactive shell
 returns to its prompt with status 1 and accepts another command.
 Skipped conditional branches do not evaluate required references.
 
-Default and required operators currently support named variables only.
-Positional operators, colon forms such as ${NAME:-word}, and command
-substitution remain unsupported. Recursive expansion and
+Default and required operators also support positional parameters:
+
+    echo "${1-fallback}"
+    echo "${1?first argument required}"
+    echo "${10-tenth argument missing}"
+
+A missing argument uses the default or triggers the required-value error.
+An existing empty argument counts as set, so it remains empty and does
+not trigger either fallback. Multi-digit indices and nested expressions
+are supported. Fallbacks and messages are evaluated only when needed.
+Assignment to positional parameters, such as ${1=value}, is rejected.
+
+Colon forms such as ${NAME:-word} and command substitution remain
+unsupported. Recursive expansion and
 brace matching enforce a nesting limit.
 Special parameters `$$`, `$!`, `$@` and `$*` remain unsupported.
 Standalone foreground assignments such as
@@ -742,7 +753,7 @@ A normal exit with numeric status 130 does not trigger this newline.
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
 | expansion.c | Quote-aware variable, status and positional-parameter expansion |
-| parameters.c | Owned positional arguments, parameter zero, count and cleanup |
+| parameters.c | Owned positional arguments, presence checks, parameter zero, count and cleanup |
 | variables.c | Local storage, export status, lookup, snapshots, restoration and cleanup |
 | assignment.c | Recognition of unquoted assignment prefixes |
 | assignment_exec.c | Ordered assignment-value expansion and application |
@@ -773,7 +784,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 10 chain-pipeline checks and 28 chain-evaluation checks.
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
-- 17 expansion unit tests and 18 positional-parameter storage checks.
+- 17 expansion unit tests and 22 positional-parameter storage checks.
 - 22 variable-storage checks and 14 variable-snapshot checks.
 - 20 assignment-recognition checks.
 - 15 assignment-parser checks.
@@ -785,10 +796,10 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 84 interactive job-control and recovery checks using a pseudo-terminal (PTY).
-- 202 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 210 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
-  19 script and 36 braced-parameter/default/required checks.
+  19 script and 44 braced-parameter/default/required checks.
   One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
@@ -1007,3 +1018,10 @@ script termination on an unset variable freed all 207 allocations,
 reported zero memory errors, and left only three standard descriptors
 open. Script status 1 was expected. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.
+
+A positional-operator Valgrind run covering empty and missing arguments,
+nested fallback evaluation and required-argument script termination freed
+all 165 allocations, reported zero memory errors, and left only three
+standard descriptors open. Script status 1 was expected. Child reports
+were suppressed with --child-silent-after-fork=yes; these figures describe
+the parent shell.
