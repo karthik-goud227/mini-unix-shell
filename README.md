@@ -97,7 +97,7 @@ expansion in assignments or redirection targets remain unsupported.
 Unquoted scalar parameter values split on spaces, tabs and newlines.
 Double quotes preserve spaces and empty arguments.
 
-This milestone supports existing single-line command syntax in files.
+Script files support the implemented single-line command syntax.
 An unquoted # at a word boundary starts a comment extending to the
 end of the line. Quoted or escaped hashes and hashes inside words remain
 literal. Comment-only lines preserve the previous command status.
@@ -783,14 +783,15 @@ Oversized input is discarded rather than partly executed.
 NUL bytes are rejected.
 
 The current implementation does not support:
-- Tilde expansion or advanced parameter expansion
-- Field splitting of expanded values
+- Tilde expansion and parameter operators beyond those documented above
+- Custom IFS-based field splitting
 - Wildcard expansion
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
 - Built-ins other than pwd in pipelines or standalone background commands
-- Loops, functions, argument-list expansion or multiline script constructs
+- Loops, functions, conditional statements or multiline script constructs
+- Argument-list expansion beyond standalone quoted "$@" and "${@}" words
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
