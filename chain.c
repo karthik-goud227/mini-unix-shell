@@ -233,7 +233,11 @@ static int chain_execute_pipeline(const Pipeline *pipeline,
 {
     size_t count = pipeline->command_count;
 
-    if (count == 0 || count > MSH_MAX_PROCESSES) {
+    if (count == 0) {
+        return 0;
+    }
+
+    if (count > MSH_MAX_PROCESSES) {
         fprintf(stderr, "msh: invalid chain pipeline length\n");
         return 2;
     }
@@ -241,7 +245,8 @@ static int chain_execute_pipeline(const Pipeline *pipeline,
     for (size_t i = 0; i < count; i++) {
         const Command *command = &pipeline->commands[i];
 
-        if (command->argc == 0 && command->assignment_count > 0) {
+        if (command->argc == 0
+        && (command->assignment_count > 0 || command->expansion_empty)) {
             continue;
         }
 
@@ -353,45 +358,7 @@ static int chain_copy_tokens(const TokenList *source,
                              size_t start, size_t count,
                              TokenList *result)
 {
-    *result = (TokenList) {0};
-
-    if (start > source->count || count > source->count - start) {
-        errno = EINVAL;
-        return -1;
-    }
-
-    if (count == 0) {
-        return 0;
-    }
-
-    result->items = calloc(count, sizeof(*result->items));
-    if (result->items == NULL) {
-        return -1;
-    }
-
-    for (size_t i = 0; i < count; i++) {
-        const Token *original = &source->items[start + i];
-        Token *copy = &result->items[i];
-
-        /* Include this zero-initialized item in failure cleanup. */
-        result->count++;
-        copy->type = original->type;
-        copy->position = original->position;
-        copy->text = strdup(original->text);
-
-        if (copy->text == NULL) {
-            free_tokens(result);
-            return -1;
-        }
-
-        copy->raw_text = strdup(original->raw_text);
-        if (copy->raw_text == NULL) {
-            free_tokens(result);
-            return -1;
-        }
-    }
-
-    return 0;
+    return tokens_copy_range(source, start, count, result);
 }
 
 static int chain_evaluate(const TokenList *tokens,
@@ -438,7 +405,7 @@ static int chain_evaluate(const TokenList *tokens,
             part.count--;
         }
 
-        if (expand_tokens(&part, status, error, sizeof(error)) == -1) {
+        if (expand_pipeline_fields(&part, status, error, sizeof(error), NULL) == -1) {
             fprintf(stderr, "msh: %s\n", error);
             free_tokens(&part);
             return 1;

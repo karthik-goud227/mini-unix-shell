@@ -21,6 +21,7 @@ typedef struct {
 typedef struct {
     char **argv;
     size_t argc;
+    int expansion_empty; /* An original word disappeared. */
 
     /* Owned original spellings of leading NAME=value words. */
     char **assignments;

@@ -73,7 +73,8 @@ _Noreturn void execute_child_command(const Command *command,
         }
     }
 
-    if (command->argc == 0 && command->assignment_count > 0) {
+    if (command->argc == 0
+        && (command->assignment_count > 0 || command->expansion_empty)) {
         _exit(0);
     }
 
@@ -174,7 +175,8 @@ int execute_pipeline(const Pipeline *pipeline,
     for (size_t i = 0; i < count; i++) {
         const Command *command = &pipeline->commands[i];
 
-        if (command->argc == 0 && command->assignment_count > 0) {
+        if (command->argc == 0
+        && (command->assignment_count > 0 || command->expansion_empty)) {
             continue;
         }
 

@@ -35,4 +35,14 @@ int expand_tokens_checked(TokenList *tokens, int last_status,
                           char *error, size_t error_size,
                           int *required_failure);
 
+/*
+ * Expand an owned pipeline token list into argument fields.
+ * Leading assignments retain their original spelling.
+ * Redirection targets expand without field splitting.
+ * Failure preserves the token list; expansion side effects may remain.
+ */
+int expand_pipeline_fields(TokenList *tokens, int last_status,
+                           char *error, size_t error_size,
+                           int *required_failure);
+
 #endif

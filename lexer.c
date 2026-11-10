@@ -1,5 +1,6 @@
 #include "lexer.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -173,4 +174,51 @@ fail:
     free(word);
     free_tokens(result);
     return -1;
+}
+
+int tokens_copy_range(const TokenList *source,
+                             size_t start, size_t count,
+                             TokenList *result)
+{
+    *result = (TokenList) {0};
+
+    if (start > source->count || count > source->count - start) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    if (count == 0) {
+        return 0;
+    }
+
+    result->items = calloc(count, sizeof(*result->items));
+    if (result->items == NULL) {
+        return -1;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        const Token *original = &source->items[start + i];
+        Token *copy = &result->items[i];
+
+        /* Include this zero-initialized item in failure cleanup. */
+        result->count++;
+        copy->type = original->type;
+        copy->position = original->position;
+        copy->assignment_ineligible = original->assignment_ineligible;
+        copy->expansion_empty = original->expansion_empty;
+        copy->text = strdup(original->text);
+
+        if (copy->text == NULL) {
+            free_tokens(result);
+            return -1;
+        }
+
+        copy->raw_text = strdup(original->raw_text);
+        if (copy->raw_text == NULL) {
+            free_tokens(result);
+            return -1;
+        }
+    }
+
+    return 0;
 }

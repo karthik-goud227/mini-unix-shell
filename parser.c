@@ -163,7 +163,12 @@ static int parse_pipeline_internal(
 
         switch (token->type) {
         case TOKEN_WORD:
-            if (recognize_assignments && command->argc == 0) {
+            if (token->expansion_empty) {
+                command->expansion_empty = 1;
+                break;
+            }
+            if (recognize_assignments && command->argc == 0
+                && !token->assignment_ineligible) {
                 size_t name_length;
                 if (assignment_name_length(token->raw_text, &name_length)) {
                     if (command->assignment_count >= MSH_MAX_ARGS) {
@@ -208,7 +213,8 @@ static int parse_pipeline_internal(
             break;
 
         case TOKEN_PIPE:
-            if ((command->argc == 0 && command->assignment_count == 0)
+            if ((command->argc == 0 && command->assignment_count == 0
+                 && !command->expansion_empty)
                 || i + 1 == tokens->count) {
                 message = "empty command in pipeline";
                 goto fail;
@@ -226,7 +232,8 @@ static int parse_pipeline_internal(
             goto fail;
 
         case TOKEN_AMP:
-            if ((command->argc == 0 && command->assignment_count == 0)
+            if ((command->argc == 0 && command->assignment_count == 0
+                 && !command->expansion_empty)
                 || i + 1 != tokens->count) {
                 message = "'&' must follow a command and end the line";
                 goto fail;
@@ -243,7 +250,8 @@ static int parse_pipeline_internal(
 
     if (result->commands[result->command_count - 1].argc == 0
         && result->commands[result->command_count - 1]
-               .assignment_count == 0) {
+               .assignment_count == 0
+        && !result->commands[result->command_count - 1].expansion_empty) {
         message = "expected command name";
         goto fail;
     }

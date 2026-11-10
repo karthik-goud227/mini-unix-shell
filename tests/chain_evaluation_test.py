@@ -177,6 +177,17 @@ cases.extend([
      "/\nparent\n", 0),
 ])
 
+cases.extend([
+    ("chain unquoted expansion splits arguments",
+     'MSH_CHAIN_VALUE="alpha beta" && '
+     'printf \'<%s>\\n\' $MSH_CHAIN_VALUE',
+     "<alpha>\n<beta>\n", 0),
+    ("chain removed pipeline stage succeeds",
+     'unset MSH_CHAIN_SPLIT_MISSING && '
+     'false | $MSH_CHAIN_SPLIT_MISSING && echo recovered',
+     "recovered\n", 0),
+])
+
 failures = 0
 
 with tempfile.TemporaryDirectory(prefix="msh-chain-evaluation-") as directory:

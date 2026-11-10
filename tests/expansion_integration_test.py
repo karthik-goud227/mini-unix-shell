@@ -50,9 +50,9 @@ with tempfile.TemporaryDirectory(prefix="msh-expansion-") as workdir:
     env["MSH_TEST_DIR"] = workdir
 
     check(
-        "expanded value remains one argument",
+        "unquoted expanded value splits into arguments",
         "printf '<%s>\\n' $MSH_TEST_VALUE\nexit\n",
-        "<hello world>\n",
+        "<hello>\n<world>\n",
     )
 
     check(
@@ -62,9 +62,9 @@ with tempfile.TemporaryDirectory(prefix="msh-expansion-") as workdir:
     )
 
     check(
-        "unset variable remains an empty argument",
+        "unquoted unset variable disappears",
         "printf '<%s>\\n' before $MSH_TEST_UNSET after\nexit\n",
-        "<before>\n<>\n<after>\n",
+        "<before>\n<after>\n",
     )
 
     check(
@@ -86,9 +86,9 @@ with tempfile.TemporaryDirectory(prefix="msh-expansion-") as workdir:
     )
 
     check(
-        "variable contents remain literal data",
+        "split variable contents remain literal data",
         "printf '%s\\n' $MSH_TEST_LITERAL\nexit\n",
-        "$HOME | cat\n",
+        "$HOME\n|\ncat\n",
     )
 
     check(

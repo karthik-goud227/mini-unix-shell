@@ -117,6 +117,7 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	python3 tests/shell_pid_integration_test.py
 	python3 tests/command_list_integration_test.py
 	python3 tests/expansion_integration_test.py
+	python3 tests/word_splitting_integration_test.py
 	python3 tests/statistics_integration_test.py
 	python3 tests/environment_integration_test.py
 	python3 tests/shell_variables_integration_test.py

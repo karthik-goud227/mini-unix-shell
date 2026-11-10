@@ -405,6 +405,10 @@ BuiltinResult run_builtin(const Command *command, int last_status)
     BuiltinResult result = {0};
 
     if (command->argc == 0) {
+        if (command->expansion_empty) {
+            result.handled = 1;
+            result.status = 0;
+        }
         if (command->assignment_count > 0) {
             char error[128];
             result.handled = 1;
@@ -483,7 +487,7 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 int is_builtin(const Command *command)
 {
     if (command->argc == 0) {
-        return command->assignment_count > 0;
+        return command->assignment_count > 0 || command->expansion_empty;
     }
 
     const char *name = command->argv[0];

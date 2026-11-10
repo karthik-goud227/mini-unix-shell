@@ -82,8 +82,9 @@ Unbraced positional references consume one digit: $10 means $1 followed
 by literal 0. Braces select a complete numeric index: ${10} selects the
 tenth argument. ${0} selects the script name, and ${#} gives the argument
 count. Missing positional parameters expand to an empty string.
-Argument-list expansions $@ and $* remain unsupported. Expansion still
-keeps each word as one argument; field splitting remains unimplemented.
+Argument-list expansions $@ and $* remain unsupported. Unquoted
+parameter values split on spaces, tabs and newlines. Double quotes
+preserve spaces and empty arguments.
 
 This milestone supports existing single-line command syntax in files.
 Script options, comments/shebang handling, multiline constructs and
@@ -297,9 +298,29 @@ echo $?
 The first command prints the home directory. The next two print
 literal `$HOME`. After `false`, `echo $?` prints `1`.
 
-Each original word remains one argument, including empty values.
-There is no field splitting or wildcard expansion, even for unquoted
-variables. This intentionally differs from full POSIX shell behavior.
+Unquoted parameter expansions split on spaces, tabs and newlines.
+Runs of this whitespace separate fields without creating empty arguments.
+An unquoted empty or missing value contributes no argument. Double quotes
+preserve expanded whitespace and empty values; single quotes and escapes
+keep their existing literal behavior.
+
+For example, with MSH_WORDS="alpha beta":
+
+    printf '<%s>\n' $MSH_WORDS
+    printf '<%s>\n' "$MSH_WORDS"
+
+The first command prints <alpha> and <beta> on separate lines. The second
+prints <alpha beta> on one line. Literal prefixes attach to the first
+field and literal suffixes attach to the last field.
+
+Leading assignment values and redirection filenames do not undergo field
+splitting. A word produced by expansion cannot become assignment syntax.
+If expansion removes an entire command, it succeeds without running a
+program; any redirections still apply. Inside a pipeline, that empty
+stage returns 0. A quoted empty command name remains an error.
+
+The same splitting rules apply inside background logical chains.
+Custom IFS handling and wildcard expansion remain unsupported.
 
 Inserted values are not expanded again or interpreted as shell syntax.
 For example, a pipe character inside a variable does not create a pipeline.
@@ -798,7 +819,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 job-state and resource-lifecycle checks.
 - 6 fork-isolation checks for inherited job records.
 - 8 chain-wait checks, 3 stop/resume checks and 9 token-copy checks.
-- 10 chain-pipeline checks and 28 chain-evaluation checks.
+- 10 chain-pipeline checks and 30 chain-evaluation checks.
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
 - 17 expansion unit tests and 32 parameter-storage/PID checks.
@@ -813,10 +834,11 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 93 interactive job-control, recovery and PID checks using a pseudo-terminal (PTY).
-- 217 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 236 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
-  19 script, 44 braced-parameter/default/required and 7 shell-PID checks.
+  19 script, 44 braced-parameter/default/required, 7 shell-PID
+  and 19 word-splitting checks.
   One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,

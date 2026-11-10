@@ -196,11 +196,15 @@ int main(int argc, char **argv)
                 continue;
             }
 
-            /* This view borrows tokens; only the full list owns them. */
-            TokenList part = {
-                .items = tokens.items + item.token_start,
-                .count = item.token_count
-            };
+            /* Expansion owns this copy and may later resize it. */
+            TokenList part = {0};
+            if (tokens_copy_range(&tokens, item.token_start,
+                                  item.token_count, &part) == -1) {
+                perror("msh: copy command tokens");
+                status = EXIT_FAILURE;
+                exit_warned = 0;
+                break;
+            }
 
             const Token *first = &part.items[0];
             const Token *last = &part.items[part.count - 1];
@@ -212,6 +216,7 @@ int main(int argc, char **argv)
 
             if (command_text == NULL) {
                 perror("msh: command text");
+                free_tokens(&part);
                 status = EXIT_FAILURE;
                 exit_warned = 0;
                 break;
@@ -219,11 +224,12 @@ int main(int argc, char **argv)
 
             /* Earlier commands may have changed status or variables. */
             int required_failure = 0;
-            if (expand_tokens_checked(&part, status,
+            if (expand_pipeline_fields(&part, status,
                                       error, sizeof(error),
                                       &required_failure) == -1) {
                 fprintf(stderr, "msh: %s\n", error);
                 free(command_text);
+                free_tokens(&part);
                 status = EXIT_FAILURE;
                 should_exit = !interactive && required_failure;
                 exit_warned = 0;
@@ -236,10 +242,12 @@ int main(int argc, char **argv)
                                error, sizeof(error)) == -1) {
                 fprintf(stderr, "msh: %s\n", error);
                 free(command_text);
+                free_tokens(&part);
                 status = 2;
                 exit_warned = 0;
                 break;
             }
+            free_tokens(&part);
 
             int unsupported_assignment = 0;
             for (size_t stage = 0; stage < pipeline.command_count; stage++) {
