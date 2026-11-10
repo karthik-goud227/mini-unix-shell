@@ -276,7 +276,14 @@ static char *expand_word(const char *raw, int last_status,
             const char *value = NULL;
             char number[32];
 
-            if (length == 1 && raw[start] == '$') {
+            if (length == 1 && raw[start] == '!') {
+                pid_t pid = parameters_last_background_pid();
+                number[0] = '\0';
+                if (pid > 0) {
+                    snprintf(number, sizeof(number), "%ld", (long)pid);
+                }
+                value = number;
+            } else if (length == 1 && raw[start] == '$') {
                 snprintf(number, sizeof(number), "%ld",
                          (long)parameters_shell_pid());
                 value = number;
@@ -325,6 +332,19 @@ static char *expand_word(const char *raw, int last_status,
             }
 
             i = end + 1;
+            continue;
+        }
+
+        if (c == '$' && raw[i + 1] == '!') {
+            pid_t pid = parameters_last_background_pid();
+            if (pid > 0) {
+                char number[32];
+                snprintf(number, sizeof(number), "%ld", (long)pid);
+                if (append(&out, &used, number, strlen(number)) == -1) {
+                    goto fail;
+                }
+            }
+            i += 2;
             continue;
         }
 

@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "executor.h"
+#include "parameters.h"
 #include "assignment.h"
 #include "builtins.h"
 #include "job_control.h"
@@ -299,6 +300,7 @@ int execute_pipeline(const Pipeline *pipeline,
 
     if (pipeline->background) {
         job->background = 1;
+        parameters_set_background_pid(job->processes[count - 1].pid);
         printf("[%d] %ld\n", job->id, (long)job->pgid);
         return 0;
     }

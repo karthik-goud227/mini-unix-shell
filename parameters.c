@@ -11,6 +11,7 @@
 static char **values;
 static size_t argument_count;
 static pid_t shell_pid;
+static pid_t last_background_pid;
 
 static void free_values(char **items, size_t count)
 {
@@ -105,4 +106,19 @@ fail:
 pid_t parameters_shell_pid(void)
 {
     return shell_pid;
+}
+
+int parameters_set_background_pid(pid_t pid)
+{
+    if (pid <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+    last_background_pid = pid;
+    return 0;
+}
+
+pid_t parameters_last_background_pid(void)
+{
+    return last_background_pid;
 }

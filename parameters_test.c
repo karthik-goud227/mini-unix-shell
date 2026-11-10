@@ -109,6 +109,23 @@ int main(void)
     parameters_clear();
     check("repeated clear is safe", parameters_count() == 0);
 
+    check("background PID initially unset",
+          parameters_last_background_pid() == 0);
+    check("background PID can be recorded",
+          parameters_set_background_pid(12345) == 0
+          && parameters_last_background_pid() == 12345);
+    check("invalid background PIDs preserve previous value",
+          parameters_set_background_pid(0) == -1
+          && parameters_set_background_pid(-1) == -1
+          && parameters_last_background_pid() == 12345);
+    check("new background PID replaces previous value",
+          parameters_set_background_pid(23456) == 0
+          && parameters_last_background_pid() == 23456);
+    check("argument replacement preserves background PID",
+          parameters_set("again.msh", 0, NULL) == 0
+          && parameters_last_background_pid() == 23456);
+    parameters_clear();
+
     printf("\nChecks: %d, failures: %d\n", checks, failures);
     return failures ? 1 : 0;
 }

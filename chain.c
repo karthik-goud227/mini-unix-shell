@@ -3,6 +3,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "chain.h"
+#include "parameters.h"
 #include "executor.h"
 #include "builtins.h"
 #include "expansion.h"
@@ -741,6 +742,7 @@ int execute_background_chain(const TokenList *tokens,
     }
 
     close(gate[1]);
+    parameters_set_background_pid(child);
     printf("[%d] %ld\n", job->id, (long)job->pgid);
     return 0;
 }

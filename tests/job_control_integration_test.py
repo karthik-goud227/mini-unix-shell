@@ -79,6 +79,9 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
     try:
         read_until(b"msh> ")
 
+        output = command('printf "<%s>\\n" "$!"')
+        check("background PID is initially empty", "\n<>\n" in output)
+
         # The marker must occur on its own line, not just in echoed input.
         send("sh -c 'echo JOB_READY; exec sleep 300'\n")
         read_until(b"\r\nJOB_READY\r\n")
@@ -785,6 +788,78 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
         else:
             raise RuntimeError("PID test chain remained active")
 
+
+        pid_cases = [
+            ("single background command records its PID", "sleep 1 &", False),
+            (
+                "background pipeline records last-stage PID",
+                "sleep 1 | sh -c "
+                "'echo $$ > background-last-stage; exec sleep 1' &",
+                True,
+            ),
+            (
+                "background logical chain records supervisor PID",
+                "true && sleep 1 &",
+                False,
+            ),
+        ]
+
+        saved_background_pid = None
+        for name, line, is_pipeline in pid_cases:
+            output = command(line)
+            launch = re.search(r"\[(\d+)\]\s+(\d+)", output)
+            if launch is None:
+                raise RuntimeError(f"Missing background PID launch: {output!r}")
+            background_groups.add(int(launch.group(2)))
+            expected_pid = launch.group(2)
+
+            if is_pipeline:
+                stage_path = Path(workdir) / "background-last-stage"
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline:
+                    if stage_path.exists():
+                        value = stage_path.read_text().strip()
+                        if value.isdigit():
+                            expected_pid = value
+                            break
+                    time.sleep(0.02)
+                else:
+                    raise RuntimeError("Last-stage PID file was not completed")
+                if expected_pid == launch.group(2):
+                    raise RuntimeError("Pipeline last stage unexpectedly equals group leader")
+
+            output = command('echo "$!"')
+            check(name, f"\n{expected_pid}\n" in output)
+            saved_background_pid = expected_pid
+
+            # Wait for completion before moving on or attempting shell exit.
+            deadline = time.monotonic() + 10
+            pattern = rf"\[{launch.group(1)}\]\s+(?:Running|Stopped)\b"
+            while time.monotonic() < deadline:
+                output = command("jobs")
+                if re.search(pattern, output) is None:
+                    break
+                time.sleep(0.02)
+            else:
+                raise RuntimeError("Background PID test job remained active")
+
+        output = command('echo "${!}"')
+        check(
+            "braced background PID matches last launch",
+            f"\n{saved_background_pid}\n" in output,
+        )
+        output = command('echo "$!"')
+        check(
+            "completed job PID survives foreground commands",
+            f"\n{saved_background_pid}\n" in output,
+        )
+
+        command("cd / &")
+        output = command('echo "$!"')
+        check(
+            "rejected background command preserves last PID",
+            f"\n{saved_background_pid}\n" in output,
+        )
 
         send("exit 0\n")
         deadline = time.monotonic() + 10

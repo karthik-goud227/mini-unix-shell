@@ -135,3 +135,5 @@ clean:
 expansion.o: parameters.h
 
 main.o: parameters.h
+
+executor.o chain.o: parameters.h

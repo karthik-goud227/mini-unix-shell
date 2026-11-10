@@ -6,7 +6,8 @@
 #include <stddef.h>
 
 /*
- * Expand $NAME, $?, $0-$9, $#, $$ and braced forms.
+ * Expand $NAME, $?, $0-$9, $#, $$, $! and braced forms.
+ * $! is empty before the first successful background launch.
  * Braces support names, numeric indices, status and argument count.
  * Defaults ${NAME-word} and ${1-word} expand word only when unset.
  * ${NAME=word} also assigns the expanded default when NAME is unset.

@@ -33,4 +33,14 @@ void parameters_clear(void);
  */
 pid_t parameters_shell_pid(void);
 
+/*
+ * Record a successfully launched background process.
+ * Reject nonpositive PIDs without changing the saved value.
+ * Argument replacement and job completion do not reset it.
+ */
+int parameters_set_background_pid(pid_t pid);
+
+/* Return the saved background PID, or zero before any launch. */
+pid_t parameters_last_background_pid(void);
+
 #endif
