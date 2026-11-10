@@ -98,8 +98,16 @@ Unquoted scalar parameter values split on spaces, tabs and newlines.
 Double quotes preserve spaces and empty arguments.
 
 This milestone supports existing single-line command syntax in files.
-Script options, comments/shebang handling, multiline constructs and
-control-flow statements are not implemented yet.
+An unquoted # at a word boundary starts a comment extending to the
+end of the line. Quoted or escaped hashes and hashes inside words remain
+literal. Comment-only lines preserve the previous command status.
+
+Shebang lines such as #!/usr/bin/env msh are accepted as comments when
+running ./msh script-file. For direct ./script execution, the operating
+system requires executable permission and a valid interpreter path.
+
+Script options, multiline constructs and control-flow statements remain
+outside the implemented scope.
 A required-parameter expansion failure terminates non-interactive
 execution with status 1. Other script error handling currently follows
 the existing command loop; broader paper-style error and signal policies
@@ -846,11 +854,12 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 93 interactive job-control, recovery and PID checks using a pseudo-terminal (PTY).
-- 243 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 267 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
   19 script, 44 braced-parameter/default/required, 7 shell-PID
-  19 word-splitting and 7 quoted argument-forwarding checks.
+  19 word-splitting, 7 quoted argument-forwarding
+  and 24 comment/shebang checks.
   One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,

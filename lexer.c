@@ -54,6 +54,11 @@ int lex_line(const char *line, TokenList *result,
             continue;
         }
 
+        /* An unquoted '#' at a word boundary starts a comment. */
+        if (line[i] == '#') {
+            break;
+        }
+
         size_t start = i;
         size_t used = 0;
         TokenType type = TOKEN_WORD;
