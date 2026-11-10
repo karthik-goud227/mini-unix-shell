@@ -106,5 +106,42 @@ check("empty default produces empty value",
       'printf "<%s>\\n" "${MSH_BRACE_TEST-}"\n',
       "<>\n")
 
+
+check("default assignment stores a local value",
+      'echo "${MSH_BRACE_TEST=hello world}"\n'
+      'echo "$MSH_BRACE_TEST"\n'
+      'printenv MSH_BRACE_TEST\necho $?\n',
+      "hello world\nhello world\n1\n")
+
+check("default assignment preserves an empty value",
+      'MSH_BRACE_TEST=\n'
+      'printf "<%s>\\n" "${MSH_BRACE_TEST=fallback}"\n',
+      "<>\n")
+
+check("set value skips assignment fallback",
+      'MSH_BRACE_TEST=kept\n'
+      'echo "${MSH_BRACE_TEST=${1bad}}"\n',
+      "kept\n")
+
+check("nested default assignments store both values",
+      'unset MSH_BRACE_INNER\n'
+      'echo "${MSH_BRACE_TEST=${MSH_BRACE_INNER=nested}}"\n'
+      'echo "$MSH_BRACE_TEST:$MSH_BRACE_INNER"\n',
+      "nested\nnested:nested\n")
+
+check("empty default assignment creates a set variable",
+      'printf "<%s>\\n" "${MSH_BRACE_TEST=}"\n'
+      'printf "<%s>\\n" "${MSH_BRACE_TEST-fallback}"\n',
+      "<>\n<>\n")
+
+check("skipped command does not assign a parameter default",
+      'false && echo "${MSH_BRACE_TEST=forbidden}"\n'
+      'echo "${MSH_BRACE_TEST-still-unset}"\n',
+      "still-unset\n")
+
+check("positional default assignment remains rejected",
+      'echo "${1=value}"\n', status=1,
+      error="invalid braced positional parameter")
+
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

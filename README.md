@@ -316,7 +316,20 @@ numeric indices report expansion errors.
 
 Named variables support default-value expansion with ${NAME-word}.
 If NAME is unset, word is expanded and substituted. An existing empty
-value remains empty. Using a default does not assign NAME.
+value remains empty. The '-' form does not assign NAME.
+
+The ${NAME=word} form also assigns the expanded fallback when NAME is
+unset, then substitutes that value. A newly created variable is local
+to the shell performing the expansion. Existing set values, including
+empty values, are preserved, and their fallback is not evaluated.
+
+For example:
+
+    echo "${MSH_DEMO=hello world}"
+    echo "$MSH_DEMO"
+
+Both commands print hello world. Nested assignment defaults are supported.
+A skipped command does not expand or assign its defaults.
 
 Examples:
 
@@ -332,8 +345,8 @@ or shell operators; the lexer does not yet group arbitrary unquoted
 fallback text as one parameter expression.
 
 Defaults currently support named variables only. Positional defaults,
-colon forms such as ${NAME:-word}, assignment/error operators and
-command substitution remain unsupported. Recursive expansion and
+colon forms such as ${NAME:-word}, error operators and command
+substitution remain unsupported. Recursive expansion and
 brace matching enforce a nesting limit.
 Special parameters `$$`, `$!`, `$@` and `$*` remain unsupported.
 Standalone foreground assignments such as
@@ -756,10 +769,10 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 81 interactive job-control checks using a pseudo-terminal (PTY).
-- 187 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 194 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
-  19 script and 21 braced-parameter/default checks.
+  19 script and 28 braced-parameter/default checks.
   One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
@@ -965,4 +978,10 @@ A parameter-default Valgrind run covering unset and empty values, nested
 fallbacks, lazy evaluation and spaced fallback text freed all 409
 allocations, reported zero memory errors, and left only three standard
 descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.
+
+A default-assignment Valgrind run covering local default assignment,
+empty-value preservation, nested assignments and lazy fallback evaluation
+freed all 401 allocations, reported zero memory errors, and left only
+three standard descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.

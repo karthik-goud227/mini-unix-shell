@@ -177,7 +177,8 @@ static char *expand_word(const char *raw, int last_status,
             }
 
             if (name_end > start && name_end < end
-                && raw[name_end] == '-') {
+                && (raw[name_end] == '-' || raw[name_end] == '=')) {
+                int assign_default = raw[name_end] == '=';
                 size_t name_length = name_end - start;
                 char *name = malloc(name_length + 1);
                 if (name == NULL) {
@@ -186,16 +187,18 @@ static char *expand_word(const char *raw, int last_status,
                 memcpy(name, raw + start, name_length);
                 name[name_length] = '\0';
                 const char *existing = variables_get(name);
-                free(name);
 
                 if (existing != NULL) {
-                    if (append(&out, &used, existing, strlen(existing)) == -1) {
+                    int result = append(&out, &used, existing, strlen(existing));
+                    free(name);
+                    if (result == -1) {
                         goto fail;
                     }
                 } else {
                     size_t fallback_length = end - name_end - 1;
                     char *fallback = malloc(fallback_length + 1);
                     if (fallback == NULL) {
+                        free(name);
                         goto fail;
                     }
                     memcpy(fallback, raw + name_end + 1, fallback_length);
@@ -205,8 +208,18 @@ static char *expand_word(const char *raw, int last_status,
                                                  failure, depth + 1, quote);
                     free(fallback);
                     if (expanded == NULL) {
+                        free(name);
                         goto fail;
                     }
+
+                    if (assign_default
+                        && variables_set(name, expanded, 0) == -1) {
+                        free(name);
+                        free(expanded);
+                        *failure = "could not assign parameter default";
+                        goto fail;
+                    }
+                    free(name);
 
                     int result = append(&out, &used, expanded, strlen(expanded));
                     free(expanded);
