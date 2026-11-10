@@ -38,8 +38,10 @@ static int append(char **out, size_t *used,
     return 0;
 }
 
-static char *expand_word(const char *raw, int last_status)
+static char *expand_word(const char *raw, int last_status,
+                         const char **failure)
 {
+    *failure = "out of memory during expansion";
     char *out = NULL;
     size_t used = 0;
     size_t i = 0;
@@ -87,6 +89,75 @@ static char *expand_word(const char *raw, int last_status)
                 goto fail;
             }
             i += 2;
+            continue;
+        }
+
+        if (c == '$' && raw[i + 1] == '{') {
+            size_t start = i + 2;
+            size_t end = start;
+            while (raw[end] != '\0' && raw[end] != '}') {
+                end++;
+            }
+
+            if (raw[end] != '}') {
+                *failure = "missing closing brace in parameter expansion";
+                goto fail;
+            }
+
+            size_t length = end - start;
+            if (length == 0) {
+                *failure = "empty braced parameter";
+                goto fail;
+            }
+
+            const char *value = NULL;
+            char number[32];
+
+            if (length == 1 && raw[start] == '?') {
+                snprintf(number, sizeof(number), "%d", last_status);
+                value = number;
+            } else if (length == 1 && raw[start] == '#') {
+                snprintf(number, sizeof(number), "%zu", parameters_count());
+                value = number;
+            } else if (raw[start] >= '0' && raw[start] <= '9') {
+                size_t index = 0;
+                for (size_t j = start; j < end; j++) {
+                    if (raw[j] < '0' || raw[j] > '9') {
+                        *failure = "invalid braced positional parameter";
+                        goto fail;
+                    }
+                    size_t digit = (size_t)(raw[j] - '0');
+                    if (index > (SIZE_MAX - digit) / 10) {
+                        *failure = "positional parameter index is too large";
+                        goto fail;
+                    }
+                    index = index * 10 + digit;
+                }
+                value = parameters_get(index);
+            } else {
+                char *name = malloc(length + 1);
+                if (name == NULL) {
+                    goto fail;
+                }
+                memcpy(name, raw + start, length);
+                name[length] = '\0';
+
+                if (!variables_valid_name(name)) {
+                    free(name);
+                    *failure = "invalid or unsupported braced parameter";
+                    goto fail;
+                }
+
+                value = variables_get(name);
+                free(name);
+            }
+
+            if (value != NULL
+                && append(&out, &used, value, strlen(value)) == -1) {
+                goto fail;
+            }
+
+            i = end + 1;
             continue;
         }
 
@@ -182,11 +253,11 @@ int expand_tokens(TokenList *tokens, int last_status,
             return -1;
         }
 
-        char *expanded = expand_word(token->raw_text, last_status);
+        const char *failure = NULL;
+        char *expanded = expand_word(token->raw_text, last_status, &failure);
         if (expanded == NULL) {
             if (error_size > 0) {
-                snprintf(error, error_size,
-                         "out of memory during expansion");
+                snprintf(error, error_size, "%s", failure);
             }
             return -1;
         }

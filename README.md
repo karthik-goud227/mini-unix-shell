@@ -79,9 +79,11 @@ Single quotes and escaped dollar signs prevent positional expansion;
 double quotes allow it. Inserted argument contents are not parsed again.
 
 Unbraced positional references consume one digit: $10 means $1 followed
-by literal 0. Braced multi-digit references such as ${10}, and argument
-list expansions $@ and $*, are not supported yet. Expansion still keeps
-each word as one argument; field splitting remains unimplemented.
+by literal 0. Braces select a complete numeric index: ${10} selects the
+tenth argument. ${0} selects the script name, and ${#} gives the argument
+count. Missing positional parameters expand to an empty string.
+Argument-list expansions $@ and $* remain unsupported. Expansion still
+keeps each word as one argument; field splitting remains unimplemented.
 
 This milestone supports existing single-line command syntax in files.
 Script options, comments/shebang handling, multiline constructs and
@@ -303,9 +305,17 @@ All `$?` references within one pipeline use the status from before
 that pipeline. A later executed list item sees the status left by
 the last executed item; skipped items leave that status unchanged.
 
-Supported expansions are `$NAME`, `$?`, `$0` through `$9`, and `$#`.
-Braced expansion such as `${HOME}` and special parameters such as `$$`,
-`$!`, `$@` and `$*` are not implemented. Standalone foreground assignments such as
+Supported expansions are `$NAME`, `$?`, `$0` through `$9`, and `$#`,
+plus braced references `${NAME}`, `${0}`, `${10}`, `${?}` and `${#}`.
+Braces delimit the reference, so ${NAME}suffix appends literal suffix
+to the variable value. Single quotes and escaped dollar signs prevent
+expansion; double quotes allow it. Inserted values are not expanded again.
+
+Empty braces, malformed names, missing closing braces and overflowing
+numeric indices report expansion errors. Braced default-value operators
+and nested parameter expressions are not implemented yet.
+Special parameters `$$`, `$!`, `$@` and `$*` remain unsupported.
+Standalone foreground assignments such as
 NAME=value are supported. Temporary assignment prefixes are supported
 on external commands and pipeline stages, in foreground or background
 execution: NAME=value command.
@@ -725,10 +735,11 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 81 interactive job-control checks using a pseudo-terminal (PTY).
-- 166 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 179 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
-  and 19 script checks. One script check uses a pseudo-terminal on stdin.
+  19 script and 13 braced-parameter checks.
+  One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -921,4 +932,10 @@ A positional-parameter Valgrind run covering script identity, argument
 count, spaced and empty arguments, assignment expansion and pipeline use
 freed all 291 allocations, reported zero memory errors, and left only
 three standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.
+
+A braced-parameter Valgrind run covering named and numeric references,
+status expansion, malformed-reference errors and recovery freed all 296
+allocations, reported zero memory errors, and left only three standard
+descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.

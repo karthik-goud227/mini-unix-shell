@@ -113,6 +113,7 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	./statistics_test
 	python3 tests/integration_test.py
 	python3 tests/script_integration_test.py
+	python3 tests/braced_parameters_integration_test.py
 	python3 tests/command_list_integration_test.py
 	python3 tests/expansion_integration_test.py
 	python3 tests/statistics_integration_test.py
