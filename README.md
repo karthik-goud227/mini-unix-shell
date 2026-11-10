@@ -312,8 +312,29 @@ to the variable value. Single quotes and escaped dollar signs prevent
 expansion; double quotes allow it. Inserted values are not expanded again.
 
 Empty braces, malformed names, missing closing braces and overflowing
-numeric indices report expansion errors. Braced default-value operators
-and nested parameter expressions are not implemented yet.
+numeric indices report expansion errors.
+
+Named variables support default-value expansion with ${NAME-word}.
+If NAME is unset, word is expanded and substituted. An existing empty
+value remains empty. Using a default does not assign NAME.
+
+Examples:
+
+    echo "${MSH_DEMO-fallback}"
+    echo "${MSH_DEMO-hello world}"
+    echo "${MSH_DEMO-${HOME}}"
+
+The fallback is evaluated only when needed. It may contain variable,
+positional-parameter, status or nested default expansions. Single quotes
+and escaped dollar signs retain their usual expansion behavior.
+Use quotes around the whole expression when the fallback contains spaces
+or shell operators; the lexer does not yet group arbitrary unquoted
+fallback text as one parameter expression.
+
+Defaults currently support named variables only. Positional defaults,
+colon forms such as ${NAME:-word}, assignment/error operators and
+command substitution remain unsupported. Recursive expansion and
+brace matching enforce a nesting limit.
 Special parameters `$$`, `$!`, `$@` and `$*` remain unsupported.
 Standalone foreground assignments such as
 NAME=value are supported. Temporary assignment prefixes are supported
@@ -735,10 +756,10 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 81 interactive job-control checks using a pseudo-terminal (PTY).
-- 179 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 187 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
-  19 script and 13 braced-parameter checks.
+  19 script and 21 braced-parameter/default checks.
   One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
@@ -936,6 +957,12 @@ three standard descriptors open. Child reports were suppressed with
 
 A braced-parameter Valgrind run covering named and numeric references,
 status expansion, malformed-reference errors and recovery freed all 296
+allocations, reported zero memory errors, and left only three standard
+descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.
+
+A parameter-default Valgrind run covering unset and empty values, nested
+fallbacks, lazy evaluation and spaced fallback text freed all 409
 allocations, reported zero memory errors, and left only three standard
 descriptors open. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.

@@ -68,8 +68,8 @@ check("empty braces rejected",
 check("missing closing brace rejected",
       'echo "${MSH_BRACE_TEST"\n', status=1,
       error="missing closing brace")
-check("unsupported default operator rejected",
-      'echo "${MSH_BRACE_TEST-default}"\n', status=1,
+check("unsupported colon-default operator rejected",
+      'echo "${MSH_BRACE_TEST:-default}"\n', status=1,
       error="invalid or unsupported braced parameter")
 check("invalid numeric reference rejected",
       'echo "${1bad}"\n', status=1,
@@ -77,6 +77,34 @@ check("invalid numeric reference rejected",
 check("overflowing numeric reference rejected",
       'echo "${' + "9" * 64 + '}"\n', status=1,
       error="positional parameter index is too large")
+
+
+check("unset variable uses default without assignment",
+      'echo "${MSH_BRACE_TEST-fallback}"\n'
+      'printenv MSH_BRACE_TEST\necho $?\n',
+      "fallback\n1\n")
+check("empty variable does not use default",
+      'MSH_BRACE_TEST=\nprintf "<%s>\\n" "${MSH_BRACE_TEST-fallback}"\n',
+      "<>\n")
+check("set variable keeps its value",
+      'MSH_BRACE_TEST=kept\necho "${MSH_BRACE_TEST-fallback}"\n',
+      "kept\n")
+check("default preserves spaces inside double quotes",
+      'echo "${MSH_BRACE_TEST-hello world}"\n',
+      "hello world\n")
+check("default expands positional parameter",
+      'echo "${MSH_BRACE_TEST-$1}"\n',
+      "argument value\n", arguments=("argument value",))
+check("nested default expands when needed",
+      'unset MSH_BRACE_INNER\n'
+      'echo "${MSH_BRACE_TEST-${MSH_BRACE_INNER-nested}}"\n',
+      "nested\n")
+check("unused fallback is not evaluated",
+      'MSH_BRACE_TEST=kept\necho "${MSH_BRACE_TEST-${1bad}}"\n',
+      "kept\n")
+check("empty default produces empty value",
+      'printf "<%s>\\n" "${MSH_BRACE_TEST-}"\n',
+      "<>\n")
 
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

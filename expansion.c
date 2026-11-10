@@ -38,14 +38,76 @@ static int append(char **out, size_t *used,
     return 0;
 }
 
-static char *expand_word(const char *raw, int last_status,
-                         const char **failure)
+/* Find the matching brace without evaluating the parameter contents. */
+static int parameter_end(const char *raw, size_t start,
+                         char outer_quote, size_t depth,
+                         size_t *end, const char **failure)
 {
+    if (depth >= 64) {
+        *failure = "parameter expansion nesting is too deep";
+        return -1;
+    }
+
+    char quote = '\0';
+    for (size_t i = start; raw[i] != '\0'; i++) {
+        char c = raw[i];
+
+        if (quote == '\'') {
+            if (c == '\'') {
+                quote = '\0';
+            }
+            continue;
+        }
+
+        if (c == '\\' && raw[i + 1] != '\0') {
+            i++;
+            continue;
+        }
+
+        if (c == '"') {
+            quote = quote == '"' ? '\0' : '"';
+            continue;
+        }
+
+        if (c == '\'' && quote == '\0' && outer_quote != '"') {
+            quote = '\'';
+            continue;
+        }
+
+        if (c == '$' && raw[i + 1] == '{') {
+            size_t nested_end;
+            char context = quote == '"' ? '"' : outer_quote;
+            if (parameter_end(raw, i + 2, context, depth + 1,
+                              &nested_end, failure) == -1) {
+                return -1;
+            }
+            i = nested_end;
+            continue;
+        }
+
+        if (c == '}' && quote == '\0') {
+            *end = i;
+            return 0;
+        }
+    }
+
+    *failure = "missing closing brace in parameter expansion";
+    return -1;
+}
+
+static char *expand_word(const char *raw, int last_status,
+                         const char **failure, size_t depth, char initial_quote)
+{
+    if (depth >= 64) {
+        *failure = "parameter expansion nesting is too deep";
+        return NULL;
+    }
+
     *failure = "out of memory during expansion";
     char *out = NULL;
     size_t used = 0;
     size_t i = 0;
-    char quote = '\0';
+    char quote = initial_quote;
 
     if (append(&out, &used, "", 0) == -1) {
         return NULL;
@@ -94,13 +156,9 @@ static char *expand_word(const char *raw, int last_status,
 
         if (c == '$' && raw[i + 1] == '{') {
             size_t start = i + 2;
-            size_t end = start;
-            while (raw[end] != '\0' && raw[end] != '}') {
-                end++;
-            }
-
-            if (raw[end] != '}') {
-                *failure = "missing closing brace in parameter expansion";
+            size_t end;
+            if (parameter_end(raw, start, quote, depth,
+                              &end, failure) == -1) {
                 goto fail;
             }
 
@@ -108,6 +166,57 @@ static char *expand_word(const char *raw, int last_status,
             if (length == 0) {
                 *failure = "empty braced parameter";
                 goto fail;
+            }
+
+            size_t name_end = start;
+            if (name_start(raw[start])) {
+                name_end++;
+                while (name_end < end && name_char(raw[name_end])) {
+                    name_end++;
+                }
+            }
+
+            if (name_end > start && name_end < end
+                && raw[name_end] == '-') {
+                size_t name_length = name_end - start;
+                char *name = malloc(name_length + 1);
+                if (name == NULL) {
+                    goto fail;
+                }
+                memcpy(name, raw + start, name_length);
+                name[name_length] = '\0';
+                const char *existing = variables_get(name);
+                free(name);
+
+                if (existing != NULL) {
+                    if (append(&out, &used, existing, strlen(existing)) == -1) {
+                        goto fail;
+                    }
+                } else {
+                    size_t fallback_length = end - name_end - 1;
+                    char *fallback = malloc(fallback_length + 1);
+                    if (fallback == NULL) {
+                        goto fail;
+                    }
+                    memcpy(fallback, raw + name_end + 1, fallback_length);
+                    fallback[fallback_length] = '\0';
+
+                    char *expanded = expand_word(fallback, last_status,
+                                                 failure, depth + 1, quote);
+                    free(fallback);
+                    if (expanded == NULL) {
+                        goto fail;
+                    }
+
+                    int result = append(&out, &used, expanded, strlen(expanded));
+                    free(expanded);
+                    if (result == -1) {
+                        goto fail;
+                    }
+                }
+
+                i = end + 1;
+                continue;
             }
 
             const char *value = NULL;
@@ -254,7 +363,7 @@ int expand_tokens(TokenList *tokens, int last_status,
         }
 
         const char *failure = NULL;
-        char *expanded = expand_word(token->raw_text, last_status, &failure);
+        char *expanded = expand_word(token->raw_text, last_status, &failure, 0, '\0');
         if (expanded == NULL) {
             if (error_size > 0) {
                 snprintf(error, error_size, "%s", failure);

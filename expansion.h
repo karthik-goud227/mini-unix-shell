@@ -8,7 +8,9 @@
 /*
  * Expand $NAME, $?, $0-$9 and $# using original word spelling.
  * Braces support names, numeric indices, status and argument count.
- * Braced default-value operators are not supported yet.
+ * Named-variable defaults ${NAME-word} expand word only when unset.
+ * Existing empty values are preserved; defaults do not assign variables.
+ * Other braced operators are not supported yet.
  * Single quotes and escaped dollar signs prevent expansion.
  *
  * Each word remains one token: no field splitting or wildcard expansion.
