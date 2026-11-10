@@ -82,9 +82,20 @@ Unbraced positional references consume one digit: $10 means $1 followed
 by literal 0. Braces select a complete numeric index: ${10} selects the
 tenth argument. ${0} selects the script name, and ${#} gives the argument
 count. Missing positional parameters expand to an empty string.
-Argument-list expansions $@ and $* remain unsupported. Unquoted
-parameter values split on spaces, tabs and newlines. Double quotes
-preserve spaces and empty arguments.
+Standalone quoted "$@" and "${@}" words forward each script argument
+separately, preserving spaces and empty arguments. With no script arguments,
+they contribute no arguments.
+
+Example inside a script:
+
+    printf '<%s>\n' "$@"
+
+This support applies to ordinary command words, including pipeline stages.
+Unquoted $@, $*, embedded forms such as "prefix$@suffix", and argument-list
+expansion in assignments or redirection targets remain unsupported.
+
+Unquoted scalar parameter values split on spaces, tabs and newlines.
+Double quotes preserve spaces and empty arguments.
 
 This milestone supports existing single-line command syntax in files.
 Script options, comments/shebang handling, multiline constructs and
@@ -413,7 +424,8 @@ The value survives job completion and foreground commands. Rejected or
 failed background launch setup leaves it unchanged. It records a launch,
 not whether that process is still running. Existing quoting rules apply.
 
-Argument-list parameters `$@` and `$*` remain unsupported.
+Standalone quoted `"$@"` and `"${@}"` support script argument forwarding.
+Other argument-list expansion forms remain unsupported.
 Standalone foreground assignments such as
 NAME=value are supported. Temporary assignment prefixes are supported
 on external commands and pipeline stages, in foreground or background
@@ -834,11 +846,11 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
 - 93 interactive job-control, recovery and PID checks using a pseudo-terminal (PTY).
-- 236 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 243 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
   19 script, 44 braced-parameter/default/required, 7 shell-PID
-  and 19 word-splitting checks.
+  19 word-splitting and 7 quoted argument-forwarding checks.
   One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,

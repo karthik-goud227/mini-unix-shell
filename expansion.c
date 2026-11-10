@@ -718,6 +718,29 @@ int expand_pipeline_fields(TokenList *tokens, int last_status,
             continue;
         }
 
+        if (!redirect_target
+            && (strcmp(token->raw_text, "\"$@\"") == 0
+                || strcmp(token->raw_text, "\"${@}\"") == 0)) {
+            command_started = 1;
+            size_t count = parameters_count();
+
+            if (count == 0) {
+                if (append_field(&output, token, "", 0) == -1) {
+                    goto fail;
+                }
+                output.items[output.count - 1].expansion_empty = 1;
+            } else {
+                for (size_t argument = 1; argument <= count; argument++) {
+                    const char *value = parameters_get(argument);
+                    if (append_field(&output, token, value,
+                                     strlen(value)) == -1) {
+                        goto fail;
+                    }
+                }
+            }
+            continue;
+        }
+
         WordBuffer word = {0};
         char *value = expand_word(token->raw_text, last_status,
                                   &failure, 0, '\0', &word);
