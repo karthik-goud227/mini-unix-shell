@@ -728,6 +728,27 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
             "\n1\n" in output,
         )
 
+        command("unset MSH_REQUIRED_PTY_TEST")
+        output = command(
+            'echo "${MSH_REQUIRED_PTY_TEST?required-pty-message}"'
+        )
+        check(
+            "interactive required parameter reports diagnostic",
+            "msh: MSH_REQUIRED_PTY_TEST: required-pty-message" in output,
+        )
+
+        output = command("echo $?")
+        check(
+            "interactive required parameter returns status 1",
+            "\n1\n" in output,
+        )
+
+        output = command("echo required-recovered")
+        check(
+            "interactive shell continues after required-parameter failure",
+            "\nrequired-recovered\n" in output,
+        )
+
         send("exit 0\n")
         deadline = time.monotonic() + 10
 

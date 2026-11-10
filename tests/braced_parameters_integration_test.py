@@ -143,5 +143,46 @@ check("positional default assignment remains rejected",
       'echo "${1=value}"\n', status=1,
       error="invalid braced positional parameter")
 
+
+check("required unset variable stops script",
+      'echo "${MSH_BRACE_TEST?custom message}"\n'
+      'echo forbidden\n',
+      status=1, error="MSH_BRACE_TEST: custom message")
+
+check("required parameter supplies default diagnostic",
+      'echo "${MSH_BRACE_TEST?}"\necho forbidden\n',
+      status=1, error="MSH_BRACE_TEST: parameter is not set")
+
+check("required empty value is accepted",
+      'MSH_BRACE_TEST=\n'
+      'printf "<%s>\\n" "${MSH_BRACE_TEST?must be set}"\n',
+      "<>\n")
+
+check("required set value skips message evaluation",
+      'MSH_BRACE_TEST=kept\n'
+      'echo "${MSH_BRACE_TEST?${1bad}}"\n',
+      "kept\n")
+
+check("required message expands script argument",
+      'echo "${MSH_BRACE_TEST?missing $1}"\n',
+      status=1, error="MSH_BRACE_TEST: missing argument",
+      arguments=("argument",))
+
+check("nested required failure propagates",
+      'unset MSH_BRACE_INNER\n'
+      'echo "${MSH_BRACE_TEST-${MSH_BRACE_INNER?inner required}}"\n'
+      'echo forbidden\n',
+      status=1, error="MSH_BRACE_INNER: inner required")
+
+check("skipped required reference has no effect",
+      'false && echo "${MSH_BRACE_TEST?forbidden}"\n'
+      'echo continued\n',
+      "continued\n")
+
+check("required failure prevents remaining list execution",
+      'echo "${MSH_BRACE_TEST?stop here}"; echo forbidden\n'
+      'echo also-forbidden\n',
+      status=1, error="MSH_BRACE_TEST: stop here")
+
 print(f"\nChecks: {checks}, failures: {failures}")
 raise SystemExit(1 if failures else 0)

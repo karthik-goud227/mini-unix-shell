@@ -88,8 +88,10 @@ keeps each word as one argument; field splitting remains unimplemented.
 This milestone supports existing single-line command syntax in files.
 Script options, comments/shebang handling, multiline constructs and
 control-flow statements are not implemented yet.
-Script error handling currently follows the existing command loop;
-full paper-style script error and signal policies remain future work.
+A required-parameter expansion failure terminates non-interactive
+execution with status 1. Other script error handling currently follows
+the existing command loop; broader paper-style error and signal policies
+remain future work.
 The script descriptor is marked close-on-exec and closed during shutdown.
 Type commands at the `msh>` prompt.
 
@@ -344,8 +346,22 @@ Use quotes around the whole expression when the fallback contains spaces
 or shell operators; the lexer does not yet group arbitrary unquoted
 fallback text as one parameter expression.
 
-Defaults currently support named variables only. Positional defaults,
-colon forms such as ${NAME:-word}, error operators and command
+Required-parameter expansion is supported for named variables:
+
+    echo "${MSH_DEMO?please set MSH_DEMO}"
+
+If MSH_DEMO is unset, the message is expanded and reported with the
+variable name. An omitted or empty message uses parameter is not set.
+A set value, including an empty value, is substituted without evaluating
+the message. Nested required-parameter failures propagate.
+
+The failing command and remaining items on its input line are skipped.
+Non-interactive execution terminates with status 1; an interactive shell
+returns to its prompt with status 1 and accepts another command.
+Skipped conditional branches do not evaluate required references.
+
+Default and required operators currently support named variables only.
+Positional operators, colon forms such as ${NAME:-word}, and command
 substitution remain unsupported. Recursive expansion and
 brace matching enforce a nesting limit.
 Special parameters `$$`, `$!`, `$@` and `$*` remain unsupported.
@@ -768,11 +784,11 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 81 interactive job-control checks using a pseudo-terminal (PTY).
-- 194 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 84 interactive job-control and recovery checks using a pseudo-terminal (PTY).
+- 202 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
-  19 script and 28 braced-parameter/default checks.
+  19 script and 36 braced-parameter/default/required checks.
   One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
@@ -984,4 +1000,10 @@ A default-assignment Valgrind run covering local default assignment,
 empty-value preservation, nested assignments and lazy fallback evaluation
 freed all 401 allocations, reported zero memory errors, and left only
 three standard descriptors open. Child reports were suppressed with
+--child-silent-after-fork=yes; these figures describe the parent shell.
+
+A required-parameter Valgrind run covering accepted empty values and
+script termination on an unset variable freed all 207 allocations,
+reported zero memory errors, and left only three standard descriptors
+open. Script status 1 was expected. Child reports were suppressed with
 --child-silent-after-fork=yes; these figures describe the parent shell.

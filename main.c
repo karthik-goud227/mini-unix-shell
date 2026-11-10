@@ -218,11 +218,14 @@ int main(int argc, char **argv)
             }
 
             /* Earlier commands may have changed status or variables. */
-            if (expand_tokens(&part, status,
-                              error, sizeof(error)) == -1) {
+            int required_failure = 0;
+            if (expand_tokens_checked(&part, status,
+                                      error, sizeof(error),
+                                      &required_failure) == -1) {
                 fprintf(stderr, "msh: %s\n", error);
                 free(command_text);
                 status = EXIT_FAILURE;
+                should_exit = !interactive && required_failure;
                 exit_warned = 0;
                 break;
             }

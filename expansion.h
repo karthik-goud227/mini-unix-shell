@@ -11,7 +11,8 @@
  * Named-variable defaults ${NAME-word} expand word only when unset.
  * ${NAME=word} also assigns the expanded default when NAME is unset.
  * Existing empty values are preserved. The '-' form does not assign.
- * Other braced operators are not supported yet.
+ * ${NAME?message} fails when NAME is unset; set empty values are valid.
+ * Its message expands only when needed. Other operators remain unsupported.
  * Single quotes and escaped dollar signs prevent expansion.
  *
  * Each word remains one token: no field splitting or wildcard expansion.
@@ -22,5 +23,14 @@
  */
 int expand_tokens(TokenList *tokens, int last_status,
                   char *error, size_t error_size);
+
+
+/*
+ * Same contract as expand_tokens. Also reports a required-parameter failure.
+ * required_failure may be NULL; otherwise it is reset on each call.
+ */
+int expand_tokens_checked(TokenList *tokens, int last_status,
+                          char *error, size_t error_size,
+                          int *required_failure);
 
 #endif

@@ -7,6 +7,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct {
+    const char *message;
+    char detail[128];
+    int required;
+} ExpansionError;
+
 static int name_start(char c)
 {
     return (c >= 'A' && c <= 'Z')
@@ -41,10 +47,10 @@ static int append(char **out, size_t *used,
 /* Find the matching brace without evaluating the parameter contents. */
 static int parameter_end(const char *raw, size_t start,
                          char outer_quote, size_t depth,
-                         size_t *end, const char **failure)
+                         size_t *end, ExpansionError *failure)
 {
     if (depth >= 64) {
-        *failure = "parameter expansion nesting is too deep";
+        failure->message = "parameter expansion nesting is too deep";
         return -1;
     }
 
@@ -91,19 +97,19 @@ static int parameter_end(const char *raw, size_t start,
         }
     }
 
-    *failure = "missing closing brace in parameter expansion";
+    failure->message = "missing closing brace in parameter expansion";
     return -1;
 }
 
 static char *expand_word(const char *raw, int last_status,
-                         const char **failure, size_t depth, char initial_quote)
+                         ExpansionError *failure, size_t depth, char initial_quote)
 {
     if (depth >= 64) {
-        *failure = "parameter expansion nesting is too deep";
+        failure->message = "parameter expansion nesting is too deep";
         return NULL;
     }
 
-    *failure = "out of memory during expansion";
+    failure->message = "out of memory during expansion";
     char *out = NULL;
     size_t used = 0;
     size_t i = 0;
@@ -164,7 +170,7 @@ static char *expand_word(const char *raw, int last_status,
 
             size_t length = end - start;
             if (length == 0) {
-                *failure = "empty braced parameter";
+                failure->message = "empty braced parameter";
                 goto fail;
             }
 
@@ -177,8 +183,10 @@ static char *expand_word(const char *raw, int last_status,
             }
 
             if (name_end > start && name_end < end
-                && (raw[name_end] == '-' || raw[name_end] == '=')) {
+                && (raw[name_end] == '-' || raw[name_end] == '='
+                    || raw[name_end] == '?')) {
                 int assign_default = raw[name_end] == '=';
+                int require_value = raw[name_end] == '?';
                 size_t name_length = name_end - start;
                 char *name = malloc(name_length + 1);
                 if (name == NULL) {
@@ -212,11 +220,23 @@ static char *expand_word(const char *raw, int last_status,
                         goto fail;
                     }
 
+                    if (require_value) {
+                        snprintf(failure->detail, sizeof(failure->detail),
+                                 "%s: %s", name,
+                                 expanded[0] != '\0'
+                                     ? expanded : "parameter is not set");
+                        failure->message = failure->detail;
+                        failure->required = 1;
+                        free(name);
+                        free(expanded);
+                        goto fail;
+                    }
+
                     if (assign_default
                         && variables_set(name, expanded, 0) == -1) {
                         free(name);
                         free(expanded);
-                        *failure = "could not assign parameter default";
+                        failure->message = "could not assign parameter default";
                         goto fail;
                     }
                     free(name);
@@ -245,12 +265,12 @@ static char *expand_word(const char *raw, int last_status,
                 size_t index = 0;
                 for (size_t j = start; j < end; j++) {
                     if (raw[j] < '0' || raw[j] > '9') {
-                        *failure = "invalid braced positional parameter";
+                        failure->message = "invalid braced positional parameter";
                         goto fail;
                     }
                     size_t digit = (size_t)(raw[j] - '0');
                     if (index > (SIZE_MAX - digit) / 10) {
-                        *failure = "positional parameter index is too large";
+                        failure->message = "positional parameter index is too large";
                         goto fail;
                     }
                     index = index * 10 + digit;
@@ -266,7 +286,7 @@ static char *expand_word(const char *raw, int last_status,
 
                 if (!variables_valid_name(name)) {
                     free(name);
-                    *failure = "invalid or unsupported braced parameter";
+                    failure->message = "invalid or unsupported braced parameter";
                     goto fail;
                 }
 
@@ -353,9 +373,14 @@ fail:
     return NULL;
 }
 
-int expand_tokens(TokenList *tokens, int last_status,
-                  char *error, size_t error_size)
+int expand_tokens_checked(TokenList *tokens, int last_status,
+                          char *error, size_t error_size,
+                          int *required_failure)
 {
+    if (required_failure != NULL) {
+        *required_failure = 0;
+    }
+
     if (error_size > 0) {
         error[0] = '\0';
     }
@@ -375,11 +400,14 @@ int expand_tokens(TokenList *tokens, int last_status,
             return -1;
         }
 
-        const char *failure = NULL;
+        ExpansionError failure = {0};
         char *expanded = expand_word(token->raw_text, last_status, &failure, 0, '\0');
         if (expanded == NULL) {
+            if (required_failure != NULL) {
+                *required_failure = failure.required;
+            }
             if (error_size > 0) {
-                snprintf(error, error_size, "%s", failure);
+                snprintf(error, error_size, "%s", failure.message);
             }
             return -1;
         }
@@ -389,4 +417,10 @@ int expand_tokens(TokenList *tokens, int last_status,
     }
 
     return 0;
+}
+
+int expand_tokens(TokenList *tokens, int last_status,
+                  char *error, size_t error_size)
+{
+    return expand_tokens_checked(tokens, last_status, error, error_size, NULL);
 }
