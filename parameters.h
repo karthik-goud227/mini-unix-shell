@@ -2,6 +2,7 @@
 #define MSH_PARAMETERS_H
 
 #include <stddef.h>
+#include <sys/types.h>
 
 /*
  * Save independent copies of parameter zero and the arguments.
@@ -26,5 +27,10 @@ size_t parameters_count(void);
 
 /* Free all storage. Safe to call repeatedly. */
 void parameters_clear(void);
+
+/* PID captured on first successful setup; zero before initialization.
+ * Preserved across argument replacement, cleanup and fork.
+ */
+pid_t parameters_shell_pid(void);
 
 #endif

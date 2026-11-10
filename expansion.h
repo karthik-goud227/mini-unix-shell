@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 /*
- * Expand $NAME, $?, $0-$9 and $# using original word spelling.
+ * Expand $NAME, $?, $0-$9, $#, $$ and braced forms.
  * Braces support names, numeric indices, status and argument count.
  * Defaults ${NAME-word} and ${1-word} expand word only when unset.
  * ${NAME=word} also assigns the expanded default when NAME is unset.

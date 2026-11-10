@@ -749,6 +749,43 @@ with tempfile.TemporaryDirectory(prefix="msh-job-control-") as workdir:
             "\nrequired-recovered\n" in output,
         )
 
+        output = command('true && echo "$$" > chain-shell-pid &')
+        launch = re.search(r"\[(\d+)\]\s+(\d+)", output)
+        check(
+            "PID test launches a separate chain supervisor",
+            launch is not None and int(launch.group(2)) != pid,
+        )
+        if launch is None:
+            raise RuntimeError(f"Missing PID test chain: {output!r}")
+        background_groups.add(int(launch.group(2)))
+
+        result_path = Path(workdir) / "chain-shell-pid"
+        deadline = time.monotonic() + 10
+        contents = ""
+        while time.monotonic() < deadline:
+            if result_path.exists():
+                contents = result_path.read_text()
+                if contents == f"{pid}\n":
+                    break
+            time.sleep(0.02)
+
+        check(
+            "chain supervisor expands original shell PID",
+            contents == f"{pid}\n",
+        )
+
+        # File output can appear before the supervisor has exited.
+        deadline = time.monotonic() + 10
+        active_pattern = rf"\[{launch.group(1)}\]\s+(?:Running|Stopped)\b"
+        while time.monotonic() < deadline:
+            output = command("jobs")
+            if re.search(active_pattern, output) is None:
+                break
+            time.sleep(0.02)
+        else:
+            raise RuntimeError("PID test chain remained active")
+
+
         send("exit 0\n")
         deadline = time.monotonic() + 10
 

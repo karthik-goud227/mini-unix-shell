@@ -307,8 +307,8 @@ All `$?` references within one pipeline use the status from before
 that pipeline. A later executed list item sees the status left by
 the last executed item; skipped items leave that status unchanged.
 
-Supported expansions are `$NAME`, `$?`, `$0` through `$9`, and `$#`,
-plus braced references `${NAME}`, `${0}`, `${10}`, `${?}` and `${#}`.
+Supported expansions are `$NAME`, `$?`, `$0` through `$9`, `$#` and `$$`,
+plus braced references `${NAME}`, `${0}`, `${10}`, `${?}`, `${#}` and `${$}`.
 Braces delimit the reference, so ${NAME}suffix appends literal suffix
 to the variable value. Single quotes and escaped dollar signs prevent
 expansion; double quotes allow it. Inserted values are not expanded again.
@@ -375,7 +375,13 @@ Assignment to positional parameters, such as ${1=value}, is rejected.
 Colon forms such as ${NAME:-word} and command substitution remain
 unsupported. Recursive expansion and
 brace matching enforce a nesting limit.
-Special parameters `$$`, `$!`, `$@` and `$*` remain unsupported.
+The $$ parameter expands to the shell's process ID; ${$} is equivalent.
+The PID is captured during initialization and stays unchanged across
+commands, argument-storage replacement and forked children, including
+background-chain supervisors. A separately invoked msh captures its own PID.
+Single quotes and escaped dollar signs prevent PID expansion.
+
+Special parameters `$!`, `$@` and `$*` remain unsupported.
 Standalone foreground assignments such as
 NAME=value are supported. Temporary assignment prefixes are supported
 on external commands and pipeline stages, in foreground or background
@@ -753,7 +759,7 @@ A normal exit with numeric status 130 does not trigger this newline.
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
 | expansion.c | Quote-aware variable, status and positional-parameter expansion |
-| parameters.c | Owned positional arguments, presence checks, parameter zero, count and cleanup |
+| parameters.c | Owned positional arguments, presence checks, stable shell PID, count and cleanup |
 | variables.c | Local storage, export status, lookup, snapshots, restoration and cleanup |
 | assignment.c | Recognition of unquoted assignment prefixes |
 | assignment_exec.c | Ordered assignment-value expansion and application |
@@ -784,7 +790,7 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 10 chain-pipeline checks and 28 chain-evaluation checks.
 - 6 chain-interruption checks.
 - 6 supervisor-launch checks plus a parent-continuation assertion.
-- 17 expansion unit tests and 22 positional-parameter storage checks.
+- 17 expansion unit tests and 27 parameter-storage/PID checks.
 - 22 variable-storage checks and 14 variable-snapshot checks.
 - 20 assignment-recognition checks.
 - 15 assignment-parser checks.
@@ -795,11 +801,11 @@ logical-operator assertions) and the existing pipeline parser tests, plus:
 - 16 completed-job statistics history checks.
 - 12 command-history module checks.
 - 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 84 interactive job-control and recovery checks using a pseudo-terminal (PTY).
-- 210 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
+- 86 interactive job-control, recovery and PID checks using a pseudo-terminal (PTY).
+- 217 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
   34 command-list, 11 expansion, 10 statistics, 24 environment,
   14 standalone shell-variable, 30 command-prefix/assignment-stage
-  19 script and 44 braced-parameter/default/required checks.
+  19 script, 44 braced-parameter/default/required and 7 shell-PID checks.
   One script check uses a pseudo-terminal on stdin.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
@@ -1025,3 +1031,9 @@ all 165 allocations, reported zero memory errors, and left only three
 standard descriptors open. Script status 1 was expected. Child reports
 were suppressed with --child-silent-after-fork=yes; these figures describe
 the parent shell.
+
+A shell-PID Valgrind run covering unbraced and braced references,
+assignment, pipeline use and fallback expansion freed all 227 allocations,
+reported zero memory errors, and left only three standard descriptors
+open. Child reports were suppressed with --child-silent-after-fork=yes;
+these figures describe the parent shell.

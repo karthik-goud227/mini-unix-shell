@@ -276,7 +276,11 @@ static char *expand_word(const char *raw, int last_status,
             const char *value = NULL;
             char number[32];
 
-            if (length == 1 && raw[start] == '?') {
+            if (length == 1 && raw[start] == '$') {
+                snprintf(number, sizeof(number), "%ld",
+                         (long)parameters_shell_pid());
+                value = number;
+            } else if (length == 1 && raw[start] == '?') {
                 snprintf(number, sizeof(number), "%d", last_status);
                 value = number;
             } else if (length == 1 && raw[start] == '#') {
@@ -321,6 +325,18 @@ static char *expand_word(const char *raw, int last_status,
             }
 
             i = end + 1;
+            continue;
+        }
+
+        if (c == '$' && raw[i + 1] == '$') {
+            char number[32];
+            snprintf(number, sizeof(number), "%ld",
+                     (long)parameters_shell_pid());
+
+            if (append(&out, &used, number, strlen(number)) == -1) {
+                goto fail;
+            }
+            i += 2;
             continue;
         }
 

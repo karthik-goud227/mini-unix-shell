@@ -4,11 +4,13 @@
 
 #include <errno.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
 
 static char **values;
 static size_t argument_count;
+static pid_t shell_pid;
 
 static void free_values(char **items, size_t count)
 {
@@ -86,6 +88,9 @@ int parameters_set(const char *zero, size_t count,
     parameters_clear();
     values = copy;
     argument_count = count;
+    if (shell_pid == 0) {
+        shell_pid = getpid();
+    }
     return 0;
 
 fail:
@@ -95,4 +100,9 @@ fail:
         errno = saved_errno;
         return -1;
     }
+}
+
+pid_t parameters_shell_pid(void)
+{
+    return shell_pid;
 }

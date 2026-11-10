@@ -1,6 +1,9 @@
 #include "parameters.h"
 
 #include <stdint.h>
+#include <errno.h>
+#include <sys/wait.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -16,6 +19,7 @@ static void check(const char *name, int passed)
 
 int main(void)
 {
+    check("shell PID initially unset", parameters_shell_pid() == 0);
     check("initial argument count is zero", parameters_count() == 0);
     check("uninitialized parameter zero is absent", !parameters_is_set(0));
     check("initial parameter is empty", strcmp(parameters_get(0), "") == 0);
@@ -26,6 +30,8 @@ int main(void)
 
     check("parameter setup succeeds",
           parameters_set(zero, 3, arguments) == 0);
+    check("saved shell PID matches initializing process",
+          parameters_shell_pid() == getpid());
     check("count excludes parameter zero", parameters_count() == 3);
     check("parameter zero is present", parameters_is_set(0));
     check("empty argument is present", parameters_is_set(2));
@@ -70,7 +76,34 @@ int main(void)
           && strcmp(parameters_get(0), "new.msh") == 0
           && strcmp(parameters_get(1), "") == 0);
 
+    check("argument replacement preserves shell PID",
+          parameters_shell_pid() == getpid());
+
+    pid_t original_pid = getpid();
+    pid_t child = fork();
+    if (child == 0) {
+        int passed = parameters_shell_pid() == original_pid
+            && parameters_set("child", 0, NULL) == 0
+            && parameters_shell_pid() == original_pid
+            && parameters_shell_pid() != getpid();
+        parameters_clear();
+        _exit(passed ? 0 : 1);
+    }
+
+    int child_status = 0;
+    pid_t waited = -1;
+    if (child > 0) {
+        do {
+            waited = waitpid(child, &child_status, 0);
+        } while (waited == -1 && errno == EINTR);
+    }
+    check("forked child retains original shell PID",
+          child > 0 && waited == child
+          && WIFEXITED(child_status) && WEXITSTATUS(child_status) == 0);
+
     parameters_clear();
+    check("cleanup preserves shell PID",
+          parameters_shell_pid() == original_pid);
     check("clear resets storage",
           parameters_count() == 0 && strcmp(parameters_get(0), "") == 0);
     parameters_clear();
