@@ -46,26 +46,13 @@ make
 
 Run these commands from the repository directory.
 
-## Local browser application
+## Optional browser demonstration
 
-MiniUnix Shell Lab provides a live browser terminal, quick command examples,
-and a script editor while retaining the C shell as its execution engine.
-The terminal is connected through a Linux pseudo-terminal so Ctrl+C,
-Ctrl+Z, `jobs`, `fg`, and `bg` work as interactive shell features.
-
-On Linux, run `./run-webapp.sh` and open <http://127.0.0.1:8765>. On Windows
-with WSL Ubuntu, double-click `run-webapp.bat`. The launcher builds the C
-shell and opens the browser when the server is ready. Teammates need GCC,
-Make, Python 3, and WSL Ubuntu on Windows. The app itself needs no extra
-Python or Node packages and works offline after the repository is obtained.
-See [webapp/README.md](webapp/README.md) for setup and behavior details.
-
-The browser is an optional demonstration interface. The OS project remains
-the C `msh` executable: it creates and manages processes, pipes, file
-descriptors, process groups, terminal ownership, and signals. The browser
-starts that executable in a Linux pseudo-terminal and forwards input and
-output; it does not implement shell commands. Every shell feature can also
-be demonstrated directly with `./msh` without the browser.
+The C `msh` executable is the project. It implements processes, pipes,
+redirection, process groups, terminal ownership, signals, and job control.
+The browser only starts `msh` in a Linux pseudo-terminal and forwards input
+and output. Direct use with `./msh` is the primary workflow and demo.
+See [webapp/README.md](webapp/README.md) if you also want the browser view.
 
 ## Script-file execution
 
