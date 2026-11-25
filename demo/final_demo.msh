@@ -1,0 +1,14 @@
+# Run from the project root: ./msh demo/final_demo.msh
+VALUE=before
+for ITEM in alpha beta
+do
+    printf 'loop=%s\n' "$ITEM"
+done
+. demo/settings.msh
+if [ "$VALUE" = after ]
+then
+    echo sourced_variable=after
+else
+    echo sourced_variable=unexpected
+fi
+printf 'apple\nbanana\n' | grep banana | wc -l

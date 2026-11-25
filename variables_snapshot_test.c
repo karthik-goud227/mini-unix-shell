@@ -2,6 +2,7 @@
 #include "variables.h"
 
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -74,6 +75,15 @@ int main(void)
     check("NULL destination rejected", variables_save(name, NULL) == -1);
     check("NULL restore rejected", variables_restore(NULL) == -1);
     variables_snapshot_free(NULL);
+
+    const char *readonly_name = "MSH_SNAPSHOT_READONLY";
+    variables_set(readonly_name, "locked", 0);
+    variables_mark_readonly(readonly_name);
+    check("save readonly variable", variables_save(readonly_name, &saved) == 0);
+    check("restore preserves readonly state", variables_restore(saved) == 0
+          && variables_set(readonly_name, "changed", 0) == -1
+          && errno == EPERM
+          && equals(variables_get(readonly_name), "locked"));
 
     variables_unset(name);
     variables_clear();

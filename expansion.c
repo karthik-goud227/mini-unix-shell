@@ -3,9 +3,12 @@
 #include "parameters.h"
 
 #include <stdint.h>
+#include <glob.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 typedef struct {
     const char *message;
@@ -26,7 +29,8 @@ static int name_char(char c)
 
 enum {
     WORD_SPLIT = 1,
-    WORD_KEEP_EMPTY = 2
+    WORD_KEEP_EMPTY = 2,
+    WORD_GLOB = 4
 };
 
 typedef struct {
@@ -81,7 +85,7 @@ static int append_expansion(WordBuffer *word, const char *text,
 
     if (quote == '\0') {
         for (size_t i = start; i < word->length; i++) {
-            word->flags[i] |= WORD_SPLIT;
+            word->flags[i] |= WORD_SPLIT | WORD_GLOB;
         }
     }
     return 0;
@@ -145,6 +149,55 @@ static inline int append_field(TokenList *fields, const Token *source,
     return 0;
 }
 
+/* Expand only unquoted wildcard bytes after splitting into fields. */
+static int append_pathname_fields(const WordBuffer *word, const Token *source,
+                                  size_t start, size_t length,
+                                  TokenList *fields)
+{
+    if (length > (SIZE_MAX - 1) / 2) return -1;
+    char *pattern = malloc(length * 2 + 1);
+    if (pattern == NULL) return -1;
+    size_t used = 0;
+    int wildcard = 0;
+    for (size_t i = 0; i < length; i++) {
+        char c = word->text[start + i];
+        int eligible = (word->flags[start + i] & WORD_GLOB) != 0;
+        if (eligible && (c == '*' || c == '?' || c == '[')) wildcard = 1;
+        if (c == '\\' || (!eligible && (c == '*' || c == '?'
+                                         || c == '[' || c == ']'))) {
+            pattern[used++] = '\\';
+        }
+        pattern[used++] = c;
+    }
+    pattern[used] = '\0';
+
+    if (!wildcard) {
+        free(pattern);
+        return append_field(fields, source, word->text + start, length);
+    }
+
+    glob_t matches = {0};
+    int result = glob(pattern, 0, NULL, &matches);
+    free(pattern);
+    if (result == GLOB_NOMATCH) {
+        globfree(&matches);
+        return append_field(fields, source, word->text + start, length);
+    }
+    if (result != 0) {
+        globfree(&matches);
+        return -1;
+    }
+    for (size_t i = 0; i < matches.gl_pathc; i++) {
+        const char *path = matches.gl_pathv[i];
+        if (append_field(fields, source, path, strlen(path)) == -1) {
+            globfree(&matches);
+            return -1;
+        }
+    }
+    globfree(&matches);
+    return 0;
+}
+
 /* Split only eligible whitespace; quote boundaries retain empty fields. */
 static inline int split_word_fields(const WordBuffer *word,
                                     const Token *source, TokenList *fields)
@@ -166,8 +219,8 @@ static inline int split_word_fields(const WordBuffer *word,
         }
 
         if (i > start || keep) {
-            if (append_field(fields, source, word->text + start,
-                             i - start) == -1) {
+            if (append_pathname_fields(word, source, start,
+                                       i - start, fields) == -1) {
                 return -1;
             }
         }
@@ -255,6 +308,30 @@ static char *expand_word(const char *raw, int last_status,
 
     if (initial_quote != '\0') {
         word.flags[0] |= WORD_KEEP_EMPTY;
+    }
+
+    /* A leading, unquoted tilde names a home directory. */
+    if (depth == 0 && initial_quote == '\0' && raw[0] == '~') {
+        size_t end = 1;
+        while (raw[end] != '\0' && raw[end] != '/') end++;
+        const char *home = NULL;
+        if (end == 1) {
+            home = variables_get("HOME");
+            if (home == NULL) {
+                struct passwd *user = getpwuid(getuid());
+                if (user != NULL) home = user->pw_dir;
+            }
+        } else {
+            char *name = strndup(raw + 1, end - 1);
+            if (name == NULL) goto fail;
+            struct passwd *user = getpwnam(name);
+            if (user != NULL) home = user->pw_dir;
+            free(name);
+        }
+        if (home != NULL) {
+            if (append(&word, home, strlen(home)) == -1) goto fail;
+            i = end;
+        }
     }
 
     while (raw[i] != '\0') {
@@ -564,6 +641,9 @@ static char *expand_word(const char *raw, int last_status,
         size_t literal_start = word.length;
         if (append(&word, raw + i, 1) == -1) {
             goto fail;
+        }
+        if (quote == '\0') {
+            word.flags[literal_start] |= WORD_GLOB;
         }
         if (depth > 0 && quote == '\0') {
             word.flags[literal_start] |= WORD_SPLIT;

@@ -38,7 +38,8 @@ int expand_tokens_checked(TokenList *tokens, int last_status,
 /*
  * Expand an owned pipeline token list into argument fields.
  * Leading assignments retain their original spelling.
- * Redirection targets expand without field splitting.
+ * Redirection targets expand without field splitting or pathname matching.
+ * Unquoted wildcards in argument fields match pathnames after splitting.
  * Failure preserves the token list; expansion side effects may remain.
  */
 int expand_pipeline_fields(TokenList *tokens, int last_status,

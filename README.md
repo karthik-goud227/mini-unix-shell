@@ -106,8 +106,47 @@ Shebang lines such as #!/usr/bin/env msh are accepted as comments when
 running ./msh script-file. For direct ./script execution, the operating
 system requires executable permission and a valid interpreter path.
 
-Script options, multiline constructs and control-flow statements remain
-outside the implemented scope.
+Script files support a restricted multiline conditional form:
+
+```
+if command-list
+then
+    commands
+elif command-list
+then
+    commands
+else
+    commands
+fi
+```
+
+`elif` may be repeated, `else` is optional, and `if` blocks may be nested.
+Conditions run through the normal command-list executor; the first condition
+with status 0 selects its branch. Skipped branches and later conditions do not
+execute or expand their commands. `then`, `else`, and `fi`
+must each be on their own line (an optional trailing comment is allowed).
+Script files also support `while command-list` and `until command-list`,
+each followed by `do` on its own line, a body, and `done` on its own line.
+Conditions are evaluated again before each iteration. Loops may be nested or
+placed inside an `if` branch. A loop returns the last executed body status,
+or 0 if its body never runs. Looping requires a seekable script file.
+Script files also support `for NAME in WORDS` followed by `do`, a body, and
+`done` on separate lines. The word list is expanded once before the loop;
+`NAME` receives each value in turn. An empty list skips the body.
+With no `in` list (`for NAME`), the loop uses the script's positional
+arguments, preserving spaces and empty arguments.
+Script files support `case WORD in` with pattern arms on separate lines,
+terminated by `;;`, and closed by `esac`. Patterns use shell wildcards
+(`*`, `?`, and bracket classes); `|` separates alternatives. The first
+matching arm runs. The case word supports parameter expansion. Pattern
+expansion and quoted patterns are not yet supported.
+Within a loop body, `break` and `continue` skip the remaining body. Each may
+take a positive loop level, such as `break 2` or `continue 2`, to target an
+enclosing loop. These commands must occupy their own line. An invalid level
+or use outside an active loop is a script error.
+These forms are available in script-file mode only. One-line forms,
+grouping and other multiline constructs remain unsupported.
+Script options also remain unsupported.
 A required-parameter expansion failure terminates non-interactive
 execution with status 1. Other script error handling currently follows
 the existing command loop; broader paper-style error and signal policies
@@ -124,14 +163,19 @@ make clean
 ## Supported features
 
 - External programs with arguments and PATH lookup
-- Built-ins: cd, pwd, exit, jobs, fg, bg, stats, export, unset and history
+- Built-ins: :, cd, pwd, exit, jobs, fg, bg, stats, export, unset,
+  history, shift, read, basic set --, umask, script-mode exec, wait and readonly
+- Script control blocks: if/elif/else, while/until, for, case,
+  break and continue
 - Single and double quotes for argument grouping
 - Shell-variable and environment-variable expansion with $NAME
+- Unquoted pathname wildcards (`*`, `?`, and bracket patterns) in argument words
 - Standalone foreground assignments with NAME=value
 - Environment-variable assignment and removal with export/unset
 - Previous command status expansion with $?
 - Empty quoted arguments and adjacent quoted/unquoted fragments
 - Backslash escaping
+- Backslash-newline continuation in command input
 - Input redirection: <
 - Output overwrite: >
 - Output append: >>
@@ -150,6 +194,16 @@ make clean
 - Confirmed shutdown with active-job cleanup
 - Per-job CPU and memory statistics with bounded session history
 - Interactive command history with numbering and clear support
+
+### Paper coverage at a glance
+
+| Area | Implemented subset | Current boundary |
+| --- | --- | --- |
+| Command execution | External commands, pipelines, redirection, lists and conditional lists | Background work requires an interactive terminal |
+| Parameters | Variables, positional arguments, special parameters, defaults, required values, whitespace splitting, home paths and pathname wildcards | No command substitution or custom IFS splitting |
+| Script control | `if`, `while`, `until`, `for`, `case`, `break`, `continue` | Multiline script-file forms only; no functions or grouping |
+| Built-ins | `.`, `:`, `test`, `[`, `cd`, `pwd`, `exit`, `export`, `unset`, `readonly`, `shift`, `read`, `set --`, `umask`, `exec` | `.` accepts a standalone file at script top level; `read`, `set --` and `exec` are limited forms |
+| Interactive work | Jobs, foreground/background control, `wait`, history and statistics | Job-control commands are unavailable in script mode |
 
 ## Examples
 
@@ -175,6 +229,36 @@ among the jobs currently listed.
 ## Built-in behavior
 
 - `cd [path]`: changes the shell's directory; no path uses HOME.
+- `: [arguments...]`: expands arguments and applies redirections, then succeeds without output.
+- `shift [N]`: removes the first N script arguments (default 1), preserving `$0`.
+  A count greater than `$#` fails without changing the arguments.
+- `. FILE`: runs a readable script in the current shell. Variables and
+  directory changes persist, including through nested sourced files (up to
+  16 levels). Use it alone on a line at script top level, without extra arguments,
+  assignment prefixes or redirections. The sourced file may contain its own
+  control blocks; an unfinished block is an error.
+- `test EXPRESSION` and `[ EXPRESSION ]`: return 0 for true, 1 for false and
+  2 for invalid syntax. Supported forms are a single nonempty string; `!`;
+  `-n`, `-z`, `-e`, `-f`, `-d`, `-r`, `-w`, `-x`; string `=` and `!=`; and
+  integer `-eq`, `-ne`, `-lt`, `-le`, `-gt`, `-ge`. Compound `-a` and `-o`
+  expressions are not implemented.
+- `read NAME`: reads one line from standard input into a shell variable.
+  This basic form preserves the whole line and does not split fields.
+- `set -- [arguments...]`: replaces the script's positional arguments.
+  Other `set` forms and shell options are not implemented.
+- `umask [MASK]`: displays the current file creation mask or sets an octal
+  mask from 0000 through 0777.
+- `exec COMMAND [arguments...]`: replaces the shell process in script mode.
+  If the command cannot start, the script continues with status 126 or 127.
+  Interactive `exec` and redirection-only `exec` are not implemented.
+- `wait`: waits for all running background jobs to finish or stop. A stopped
+  job causes status 1; arguments are not yet supported.
+- `readonly NAME[=VALUE] ...`: marks one or more shell variables immutable.
+  Assignment and `unset` then fail; exporting the current value is allowed.
+  Temporary assignment prefixes on `readonly` are not supported.
+- `eval WORDS...`: in a standalone line, expands the words once, joins them,
+  then parses and runs the result as an ordinary command list. The form is
+  limited to eight nested evaluations and does not create control blocks.
 - `pwd`: prints the physical current directory; accepts no arguments.
 - `exit [status]`: exits with a decimal status from 0 through 255.
   Without an argument, it preserves the previous status.
@@ -190,16 +274,16 @@ among the jobs currently listed.
 - `bg %N`: resumes job N without giving it the terminal.
 
 All built-ins run in the parent for standalone foreground commands.
-Only pwd is permitted inside ordinary pipelines or single-command
+Only pwd and : are permitted inside ordinary pipelines or single-command
 background jobs.
 
-Inside a multi-item background logical chain, standalone cd, pwd,
-export, unset and exit run in the supervisor. Directory and environment
-changes affect only that supervisor and its future children.
-exit ends the chain. Only pwd is permitted in multi-stage pipelines.
+Inside a multi-item background logical chain, supported standalone
+built-ins run in the supervisor. Their changes to variables, arguments,
+directory, or file creation mask affect only that supervisor and its
+future children.
+exit ends the chain. Only pwd and : are permitted in multi-stage pipelines.
 jobs, fg, bg, stats and history are rejected inside the chain.
-Redirection is supported for cd, pwd, exit, jobs, stats, export,
-unset and history.
+Redirection is supported for standalone foreground built-ins.
 Redirection on fg and bg is deliberately rejected.
 
 Job-control built-ins and background execution require an interactive
@@ -339,7 +423,11 @@ program; any redirections still apply. Inside a pipeline, that empty
 stage returns 0. A quoted empty command name remains an error.
 
 The same splitting rules apply inside background logical chains.
-Custom IFS handling and wildcard expansion remain unsupported.
+Unquoted wildcard patterns in argument words match pathnames after field
+splitting. Quoted or escaped wildcard characters remain literal. An
+unmatched pattern remains unchanged. Leading assignments and redirection
+targets do not undergo pathname expansion. Custom IFS handling remains
+unsupported.
 
 Inserted values are not expanded again or interpreted as shell syntax.
 For example, a pipe character inside a variable does not create a pipeline.
@@ -783,21 +871,28 @@ Oversized input is discarded rather than partly executed.
 NUL bytes are rejected.
 
 The current implementation does not support:
-- Tilde expansion and parameter operators beyond those documented above
+- Parameter operators beyond those documented above
 - Custom IFS-based field splitting
-- Wildcard expansion
 - Command substitution
 - Subshell/grouping syntax
 - Here-documents or arbitrary file-descriptor redirection
-- Built-ins other than pwd in pipelines or standalone background commands
-- Loops, functions, conditional statements or multiline script constructs
+- Built-ins other than pwd and : in pipelines or standalone background commands
+- Functions, one-line control forms and other multiline script constructs
 - Argument-list expansion beyond standalone quoted "$@" and "${@}" words
 - Persistent history, history recall, arrow-key navigation or autocomplete
 - A custom memory allocator
 
 Single quotes preserve literal text; double quotes allow variable
 expansion. Unquoted semicolons separate list items.
+An unquoted or double-quoted backslash immediately before a newline joins
+the two physical lines into one command. The joined command still obeys
+the 4096-byte input limit.
 Unquoted parentheses and backticks are still rejected.
+
+A leading, unquoted `~` expands to the current home directory, while
+`~user` uses that user's home directory. A slash may follow either form.
+If the user does not exist, the word stays literal. Quoted or escaped
+tildes stay literal. The same rule applies at the start of assignment values.
 
 After a foreground job completes with a process terminated by SIGINT,
 the interactive shell prints a newline before subsequent shell output.
@@ -807,7 +902,7 @@ A normal exit with numeric status 130 does not trigger this newline.
 
 | Module | Responsibility |
 | --- | --- |
-| main.c | Initialization, script-file selection, conditional list execution, status and shutdown |
+| main.c | Initialization, script control blocks, command lists, status and shutdown |
 | input.c | Bounded descriptor-based input and poll-based event waiting |
 | history.c | Bounded command storage, numbering, display and cleanup |
 | lexer.c | Words, operators, quotes, escapes and original token spelling |
@@ -832,36 +927,14 @@ A normal exit with numeric status 130 does not trigger this newline.
 make test
 ```
 
-This builds and runs lexer tests (including four semicolon and ten
-logical-operator assertions) and the existing pipeline parser tests, plus:
-
-- 45 command-list parser tests.
-
-- 12 job-state and resource-lifecycle checks.
-- 6 fork-isolation checks for inherited job records.
-- 8 chain-wait checks, 3 stop/resume checks and 9 token-copy checks.
-- 10 chain-pipeline checks and 30 chain-evaluation checks.
-- 6 chain-interruption checks.
-- 6 supervisor-launch checks plus a parent-continuation assertion.
-- 17 expansion unit tests and 32 parameter-storage/PID checks.
-- 22 variable-storage checks and 14 variable-snapshot checks.
-- 20 assignment-recognition checks.
-- 15 assignment-parser checks.
-- 14 assignment-execution checks.
-- 9 assignment-dispatcher and redirection checks.
-- 9 resource-recorder checks.
-- 5 actual resource-collection checks.
-- 16 completed-job statistics history checks.
-- 12 command-history module checks.
-- 9 interactive command-history checks using a pseudo-terminal (PTY).
-- 93 interactive job-control, recovery and PID checks using a pseudo-terminal (PTY).
-- 267 whole-shell integration checks outside the job-control/history PTY suites: 24 general,
-  34 command-list, 11 expansion, 10 statistics, 24 environment,
-  14 standalone shell-variable, 30 command-prefix/assignment-stage
-  19 script, 44 braced-parameter/default/required, 7 shell-PID
-  19 word-splitting, 7 quoted argument-forwarding
-  and 24 comment/shebang checks.
-  One script check uses a pseudo-terminal on stdin.
+This builds the shell and runs C unit tests, script integration tests and
+interactive pseudo-terminal tests. The C tests cover lexing, parsing,
+expansion, variables, assignments, jobs and resource accounting. The script
+tests exercise command lists, redirections, pipelines, parameters, control
+blocks, built-ins, pathname expansion, sourcing and error handling. The
+interactive tests cover history, signals and job control. Individual test
+programs print their own check counts and results; the Makefile is the
+authoritative list of tests in this version.
 
 Integration tests cover quoting, statuses, pipelines, redirection,
 error recovery and configured input/argument/pipeline limits.
@@ -893,6 +966,11 @@ They run automatically through make test using Python's standard library.
 
 The manual checks below remain useful for additional scenarios,
 including background terminal readers, idle reaping and active-job shutdown.
+
+The final source audit ran `make test` successfully and checked a script
+combining sourcing, `if`, `test`, assignment and tilde expansion under
+Valgrind 3.22.0. That run reported 0 memory errors and no allocations
+remaining at exit. These results apply to the tested inputs and environment.
 
 ## Manual job-control checks
 
@@ -977,10 +1055,10 @@ These results cover the exercised scenarios, not every possible failure.
 
 ## Future extensions
 
-The next priority is broader coverage of the base paper's shell behavior,
-including command-prefix assignments, broader assignment execution,
-parameter expansion, scripts, control structures, grouping and
-command substitution.
+The remaining major gaps relative to the base paper are command
+substitution, here-documents, grouping and shell functions. The implemented
+control structures use restricted multiline script syntax. Additional
+parameter operators and custom field splitting remain future work.
 
 Further extensions such as persistent history, history recall,
 autocomplete and a project-specific memory allocator are deferred

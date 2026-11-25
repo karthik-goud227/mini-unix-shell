@@ -96,6 +96,9 @@ void jobs_notify(void);
 
 int jobs_have_active(void);
 
+/* Wait until all running jobs finish or stop. Returns 1 if jobs stop or waiting fails. */
+int jobs_wait_all(void);
+
 int jobs_print(void);
 
 /* Terminate remaining jobs, reap children and release the table. */

@@ -29,6 +29,9 @@ int variables_set(const char *name, const char *value, int exported);
  */
 int variables_export(const char *name);
 
+/* Mark a variable as immutable, creating an empty local value if absent. */
+int variables_mark_readonly(const char *name);
+
 /*
  * Remove a variable from shell storage and the environment.
  * Removing an absent variable succeeds.

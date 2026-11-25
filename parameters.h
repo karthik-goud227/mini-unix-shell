@@ -25,6 +25,9 @@ int parameters_is_set(size_t index);
 /* Number of arguments, excluding parameter zero. */
 size_t parameters_count(void);
 
+/* Discard count positional arguments, preserving parameter zero. */
+int parameters_shift(size_t count);
+
 /* Free all storage. Safe to call repeatedly. */
 void parameters_clear(void);
 

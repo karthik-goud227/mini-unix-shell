@@ -8,14 +8,214 @@
 #include "job_control.h"
 #include "terminal.h"
 #include "redirection.h"
+#include "parameters.h"
+#include "input.h"
 
 #include <errno.h>
 #include <limits.h>
+#include <stdint.h>
+#include <inttypes.h>
 #include <signal.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+static int test_number(const char *text, intmax_t *value)
+{
+    if (*text == '\0') return -1;
+    errno = 0;
+    char *end;
+    intmax_t parsed = strtoimax(text, &end, 10);
+    if (errno == ERANGE || *end != '\0') return -1;
+    *value = parsed;
+    return 0;
+}
+
+/* Return 0 for true, 1 for false, and 2 for invalid expressions. */
+static int builtin_test(const Command *command)
+{
+    const char *name = command->argv[0];
+    size_t end = command->argc;
+    if (strcmp(name, "[") == 0) {
+        if (end < 2 || strcmp(command->argv[end - 1], "]") != 0) {
+            fprintf(stderr, "msh: [: missing ]\n");
+            return 2;
+        }
+        end--;
+    }
+    const char **arg = (const char **)command->argv + 1;
+    size_t count = end - 1;
+    int negate = 0;
+    while (count > 0 && strcmp(*arg, "!") == 0) {
+        negate = !negate;
+        arg++;
+        count--;
+    }
+    int truth = 0;
+    if (count == 0) {
+        truth = 0;
+    } else if (count == 1) {
+        truth = **arg != '\0';
+    } else if (count == 2) {
+        const char *operand = arg[1];
+        if (strcmp(arg[0], "-n") == 0) truth = *operand != '\0';
+        else if (strcmp(arg[0], "-z") == 0) truth = *operand == '\0';
+        else if (strcmp(arg[0], "-e") == 0) truth = access(operand, F_OK) == 0;
+        else if (strcmp(arg[0], "-r") == 0) truth = access(operand, R_OK) == 0;
+        else if (strcmp(arg[0], "-w") == 0) truth = access(operand, W_OK) == 0;
+        else if (strcmp(arg[0], "-x") == 0) truth = access(operand, X_OK) == 0;
+        else if (strcmp(arg[0], "-f") == 0 || strcmp(arg[0], "-d") == 0) {
+            struct stat info;
+            truth = stat(operand, &info) == 0
+                && (strcmp(arg[0], "-f") == 0 ? S_ISREG(info.st_mode)
+                                                : S_ISDIR(info.st_mode));
+        } else goto invalid;
+    } else if (count == 3) {
+        const char *op = arg[1];
+        if (strcmp(op, "=") == 0) truth = strcmp(arg[0], arg[2]) == 0;
+        else if (strcmp(op, "!=") == 0) truth = strcmp(arg[0], arg[2]) != 0;
+        else if (strcmp(op, "-eq") == 0 || strcmp(op, "-ne") == 0
+                 || strcmp(op, "-lt") == 0 || strcmp(op, "-le") == 0
+                 || strcmp(op, "-gt") == 0 || strcmp(op, "-ge") == 0) {
+            intmax_t left, right;
+            if (test_number(arg[0], &left) == -1
+                || test_number(arg[2], &right) == -1) goto invalid;
+            if (strcmp(op, "-eq") == 0) truth = left == right;
+            else if (strcmp(op, "-ne") == 0) truth = left != right;
+            else if (strcmp(op, "-lt") == 0) truth = left < right;
+            else if (strcmp(op, "-le") == 0) truth = left <= right;
+            else if (strcmp(op, "-gt") == 0) truth = left > right;
+            else truth = left >= right;
+        } else goto invalid;
+    } else goto invalid;
+    return (truth != negate) ? 0 : 1;
+invalid:
+    fprintf(stderr, "msh: %s: invalid expression\n", name);
+    return 2;
+}
+
+static int builtin_shift(const Command *command)
+{
+    if (command->argc > 2) {
+        fprintf(stderr, "msh: shift: expected zero or one count\n");
+        return 2;
+    }
+    size_t count = 1;
+    if (command->argc == 2) {
+        const char *argument = command->argv[1];
+        if (*argument == '\0') {
+            fprintf(stderr, "msh: shift: count must be a nonnegative integer\n");
+            return 2;
+        }
+        for (const char *digit = argument; *digit != '\0'; digit++) {
+            if (*digit < '0' || *digit > '9') {
+                fprintf(stderr, "msh: shift: count must be a nonnegative integer\n");
+                return 2;
+            }
+        }
+        errno = 0;
+        uintmax_t parsed = strtoumax(argument, NULL, 10);
+        if (errno == ERANGE || parsed > SIZE_MAX) {
+            fprintf(stderr, "msh: shift: count is too large\n");
+            return 2;
+        }
+        count = (size_t)parsed;
+    }
+    if (parameters_shift(count) == -1) {
+        fprintf(stderr, "msh: shift: count exceeds $#\n");
+        return 1;
+    }
+    return 0;
+}
+
+static int builtin_read(const Command *command)
+{
+    if (command->argc != 2
+        || !variables_valid_name(command->argv[1])) {
+        fprintf(stderr, "msh: read: expected one variable name\n");
+        return 2;
+    }
+
+    char *line = NULL;
+    size_t capacity = 0;
+    int result = input_read_line_fd(STDIN_FILENO, &line, &capacity);
+    if (result == -1 || result == -2) {
+        free(line);
+        return 1;
+    }
+    if (result == -3) {
+        free(line);
+        return 130;
+    }
+    if (variables_set(command->argv[1], result == 0 ? "" : line, 0) == -1) {
+        perror("msh: read");
+        free(line);
+        return 1;
+    }
+    free(line);
+    return result == 0 ? 1 : 0;
+}
+
+static int builtin_set(const Command *command)
+{
+    if (command->argc < 2 || strcmp(command->argv[1], "--") != 0) {
+        fprintf(stderr, "msh: set: expected set -- [arguments...]\n");
+        return 2;
+    }
+    if (parameters_set(parameters_get(0), command->argc - 2,
+                       command->argc > 2 ? command->argv + 2 : NULL) == -1) {
+        perror("msh: set arguments");
+        return 1;
+    }
+    return 0;
+}
+
+static int builtin_umask(const Command *command)
+{
+    if (command->argc == 1) {
+        mode_t current = umask(0);
+        umask(current);
+        return printf("%04o\n", (unsigned int)current) < 0 ? 1 : 0;
+    }
+    if (command->argc != 2 || command->argv[1][0] == '\0') {
+        fprintf(stderr, "msh: umask: expected an octal mask\n");
+        return 2;
+    }
+    unsigned int mask = 0;
+    for (const char *digit = command->argv[1]; *digit != '\0'; digit++) {
+        if (*digit < '0' || *digit > '7' || mask > 0777U / 8U) {
+            fprintf(stderr, "msh: umask: expected 0000 through 0777\n");
+            return 2;
+        }
+        mask = mask * 8U + (unsigned int)(*digit - '0');
+    }
+    if (mask > 0777U) {
+        fprintf(stderr, "msh: umask: expected 0000 through 0777\n");
+        return 2;
+    }
+    umask((mode_t)mask);
+    return 0;
+}
+
+static int builtin_exec(const Command *command)
+{
+    if (command->argc < 2) {
+        fprintf(stderr, "msh: exec: expected a command\n");
+        return 2;
+    }
+    if (terminal_is_interactive()) {
+        fprintf(stderr, "msh: exec: supported in script mode only\n");
+        return 2;
+    }
+    fflush(NULL);
+    execvp(command->argv[1], command->argv + 1);
+    int saved_errno = errno;
+    fprintf(stderr, "msh: exec: %s: %s\n", command->argv[1],
+            strerror(saved_errno));
+    return saved_errno == ENOENT || saved_errno == ENOTDIR ? 127 : 126;
+}
 
 static int builtin_stats(const Command *command)
 {
@@ -175,6 +375,42 @@ static int builtin_unset(const Command *command)
         return 1;
     }
 
+    return 0;
+}
+
+static int builtin_readonly(const Command *command)
+{
+    if (command->argc < 2) {
+        fprintf(stderr, "msh: readonly: expected NAME or NAME=value\n");
+        return 2;
+    }
+    for (size_t i = 1; i < command->argc; i++) {
+        const char *argument = command->argv[i];
+        const char *equals = strchr(argument, '=');
+        size_t length = equals == NULL ? strlen(argument)
+            : (size_t)(equals - argument);
+        if (!valid_environment_name(argument, length)) {
+            fprintf(stderr, "msh: readonly: invalid variable name\n");
+            return 2;
+        }
+    }
+    for (size_t i = 1; i < command->argc; i++) {
+        const char *argument = command->argv[i];
+        const char *equals = strchr(argument, '=');
+        size_t length = equals == NULL ? strlen(argument)
+            : (size_t)(equals - argument);
+        char *name = strndup(argument, length);
+        if (name == NULL) {
+            perror("msh: readonly");
+            return 1;
+        }
+        int result = 0;
+        if (equals != NULL) result = variables_set(name, equals + 1, 0);
+        if (result == 0) result = variables_mark_readonly(name);
+        if (result == -1) perror("msh: readonly");
+        free(name);
+        if (result == -1) return 1;
+    }
     return 0;
 }
 
@@ -427,12 +663,45 @@ BuiltinResult run_builtin(const Command *command, int last_status)
 
     const char *name = command->argv[0];
 
-    if (strcmp(name, "history") == 0) {
+    if (strcmp(name, ":") == 0) {
+        /* Arguments have already been expanded; the null command succeeds. */
+        result.handled = 1;
+        result.status = 0;
+    } else if (strcmp(name, "test") == 0 || strcmp(name, "[") == 0) {
+        result.handled = 1;
+        result.status = builtin_test(command);
+    } else if (strcmp(name, "shift") == 0) {
+        result.handled = 1;
+        result.status = builtin_shift(command);
+    } else if (strcmp(name, "read") == 0) {
+        result.handled = 1;
+        result.status = builtin_read(command);
+    } else if (strcmp(name, "set") == 0) {
+        result.handled = 1;
+        result.status = builtin_set(command);
+    } else if (strcmp(name, "umask") == 0) {
+        result.handled = 1;
+        result.status = builtin_umask(command);
+    } else if (strcmp(name, "exec") == 0) {
+        result.handled = 1;
+        result.status = builtin_exec(command);
+    } else if (strcmp(name, "wait") == 0) {
+        result.handled = 1;
+        if (command->argc != 1) {
+            fprintf(stderr, "msh: wait: arguments are not supported\n");
+            result.status = 2;
+        } else {
+            result.status = jobs_wait_all();
+        }
+    } else if (strcmp(name, "history") == 0) {
         result.handled = 1;
         result.status = builtin_history(command);
     } else if (strcmp(name, "unset") == 0) {
         result.handled = 1;
         result.status = builtin_unset(command);
+    } else if (strcmp(name, "readonly") == 0) {
+        result.handled = 1;
+        result.status = builtin_readonly(command);
     } else if (strcmp(name, "export") == 0) {
         result.handled = 1;
         result.status = builtin_export(command);
@@ -492,13 +761,23 @@ int is_builtin(const Command *command)
 
     const char *name = command->argv[0];
 
-    return strcmp(name, "cd") == 0
+    return strcmp(name, ":") == 0
+        || strcmp(name, "test") == 0
+        || strcmp(name, "[") == 0
+        || strcmp(name, "shift") == 0
+        || strcmp(name, "read") == 0
+        || strcmp(name, "set") == 0
+        || strcmp(name, "umask") == 0
+        || strcmp(name, "exec") == 0
+        || strcmp(name, "wait") == 0
+        || strcmp(name, "cd") == 0
         || strcmp(name, "pwd") == 0
         || strcmp(name, "exit") == 0
         || strcmp(name, "jobs") == 0
         || strcmp(name, "stats") == 0
         || strcmp(name, "export") == 0
         || strcmp(name, "unset") == 0
+        || strcmp(name, "readonly") == 0
         || strcmp(name, "history") == 0
         || strcmp(name, "fg") == 0
         || strcmp(name, "bg") == 0;
@@ -507,6 +786,11 @@ int is_builtin(const Command *command)
 static BuiltinResult run_builtin_with_prefixes(const Command *command,
                                                int last_status)
 {
+    if (command->argc > 0 && command->assignment_count > 0
+        && strcmp(command->argv[0], "readonly") == 0) {
+        fprintf(stderr, "msh: readonly: assignment prefixes are not supported\n");
+        return (BuiltinResult) {.handled = 1, .status = 2};
+    }
     if (command->argc == 0 || command->assignment_count == 0) {
         return run_builtin(command, last_status);
     }

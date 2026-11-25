@@ -113,6 +113,24 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	./statistics_test
 	python3 tests/integration_test.py
 	python3 tests/script_integration_test.py
+	python3 tests/if_integration_test.py
+	python3 tests/loop_integration_test.py
+	python3 tests/for_integration_test.py
+	python3 tests/case_integration_test.py
+	python3 tests/shift_integration_test.py
+	python3 tests/read_integration_test.py
+	python3 tests/set_integration_test.py
+	python3 tests/umask_integration_test.py
+	python3 tests/paper_features_integration_test.py
+	python3 tests/glob_integration_test.py
+	python3 tests/exec_integration_test.py
+	python3 tests/wait_integration_test.py
+	python3 tests/readonly_integration_test.py
+	python3 tests/continuation_integration_test.py
+	python3 tests/eval_integration_test.py
+	python3 tests/test_builtin_integration_test.py
+	python3 tests/tilde_integration_test.py
+	python3 tests/source_integration_test.py
 	python3 tests/comments_integration_test.py
 	python3 tests/quoted_at_integration_test.py
 	python3 tests/braced_parameters_integration_test.py

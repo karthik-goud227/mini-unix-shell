@@ -11,6 +11,7 @@ typedef struct Variable {
     char *name;
     char *value;
     int exported;
+    int readonly;
     struct Variable *next;
 } Variable;
 
@@ -64,6 +65,10 @@ int variables_set(const char *name, const char *value, int exported)
     }
 
     Variable *item = find_variable(name);
+    if (item != NULL && item->readonly) {
+        errno = EPERM;
+        return -1;
+    }
     int should_export = exported != 0
         || (item != NULL && item->exported)
         || getenv(name) != NULL;
@@ -115,6 +120,12 @@ int variables_set(const char *name, const char *value, int exported)
 
 int variables_export(const char *name)
 {
+    Variable *item = variables_valid_name(name) ? find_variable(name) : NULL;
+    if (item != NULL && item->readonly) {
+        if (setenv(name, item->value, 1) == -1) return -1;
+        item->exported = 1;
+        return 0;
+    }
     const char *value = variables_get(name);
 
     if (value == NULL) {
@@ -125,10 +136,34 @@ int variables_export(const char *name)
     return variables_set(name, value, 1);
 }
 
+int variables_mark_readonly(const char *name)
+{
+    if (!variables_valid_name(name)) {
+        errno = EINVAL;
+        return -1;
+    }
+    Variable *item = find_variable(name);
+    if (item == NULL) {
+        const char *value = getenv(name);
+        if (variables_set(name, value == NULL ? "" : value, 0) == -1) {
+            return -1;
+        }
+        item = find_variable(name);
+    }
+    item->readonly = 1;
+    return 0;
+}
+
 int variables_unset(const char *name)
 {
     if (!variables_valid_name(name)) {
         errno = EINVAL;
+        return -1;
+    }
+
+    Variable *existing = find_variable(name);
+    if (existing != NULL && existing->readonly) {
+        errno = EPERM;
         return -1;
     }
 
@@ -219,6 +254,7 @@ int variables_save(const char *name, VariableSnapshot **snapshot)
         copy->saved->name = strdup(item->name);
         copy->saved->value = strdup(item->value);
         copy->saved->exported = item->exported;
+        copy->saved->readonly = item->readonly;
         if (copy->saved->name == NULL || copy->saved->value == NULL) {
             goto fail;
         }

@@ -68,6 +68,13 @@ with tempfile.TemporaryDirectory(prefix="msh-tests-") as workdir:
     )
 
     check("success status", "true\nexit\n", "")
+    check("null command resets status", "false\n: ignored\nexit\n", "")
+    check("null command expands arguments",
+          ': "${MSH_NULL_VALUE=ready}"\necho "$MSH_NULL_VALUE"\nexit\n',
+          "ready\n")
+    check("null command applies redirection",
+          ": > null-output\nwc -c < null-output\nexit\n", "0\n")
+    check("null command works in a pipeline", ": | cat\nexit\n", "")
     check("failure status", "false\nexit\n", "", 1)
 
     check(

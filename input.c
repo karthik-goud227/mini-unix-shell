@@ -10,7 +10,30 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-int input_read_line_fd(int fd, char **line, size_t *capacity)
+static int command_continues(const char *line, size_t used)
+{
+    if (used == 0 || line[used - 1] != '\\') return 0;
+    char quote = '\0';
+    for (size_t i = 0; i < used; i++) {
+        char c = line[i];
+        if (quote == '\'') {
+            if (c == '\'') quote = '\0';
+        } else if (c == '\\' && i + 1 < used) {
+            i++;
+        } else if (quote == '\0' && (c == '\'' || c == '"')) {
+            quote = c;
+        } else if (quote == '"' && c == '"') {
+            quote = '\0';
+        }
+    }
+    if (quote == '\'') return 0;
+    size_t trailing = 0;
+    while (trailing < used && line[used - trailing - 1] == '\\') trailing++;
+    return trailing % 2 != 0;
+}
+
+static int input_read_line_internal(int fd, char **line, size_t *capacity,
+                                    int command_mode)
 {
     if (*capacity < MSH_MAX_LINE + 1) {
         char *grown = realloc(*line, MSH_MAX_LINE + 1);
@@ -90,6 +113,12 @@ int input_read_line_fd(int fd, char **line, size_t *capacity)
             return -1;
         }
 
+        if (count > 0 && byte == '\n' && command_mode && !too_long
+            && command_continues(*line, used)) {
+            used--; /* Remove the unescaped backslash and newline. */
+            continue;
+        }
+
         if (count == 0 || byte == '\n') {
             (*line)[used] = '\0';
 
@@ -126,7 +155,17 @@ int input_read_line_fd(int fd, char **line, size_t *capacity)
     }
 }
 
+int input_read_line_fd(int fd, char **line, size_t *capacity)
+{
+    return input_read_line_internal(fd, line, capacity, 0);
+}
+
+int input_read_command_line_fd(int fd, char **line, size_t *capacity)
+{
+    return input_read_line_internal(fd, line, capacity, 1);
+}
+
 int input_read_line(char **line, size_t *capacity)
 {
-    return input_read_line_fd(STDIN_FILENO, line, capacity);
+    return input_read_command_line_fd(STDIN_FILENO, line, capacity);
 }

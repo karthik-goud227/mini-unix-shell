@@ -256,7 +256,8 @@ static int chain_execute_pipeline(const Pipeline *pipeline,
         }
 
         if (is_builtin(command)
-            && strcmp(command->argv[0], "pwd") != 0) {
+            && strcmp(command->argv[0], "pwd") != 0
+            && strcmp(command->argv[0], ":") != 0) {
             fprintf(stderr,
                     "msh: %s is not supported in a chain pipeline\n",
                     command->argv[0]);
@@ -427,7 +428,8 @@ static int chain_evaluate(const TokenList *tokens,
             if (command->assignment_count > 0
                 && command->argc > 0 && is_builtin(command)
                 && (pipeline.command_count != 1 || pipeline.background)
-                    && strcmp(command->argv[0], "pwd") != 0) {
+                    && strcmp(command->argv[0], "pwd") != 0
+                    && strcmp(command->argv[0], ":") != 0) {
                 unsupported_assignment = 1;
             }
         }

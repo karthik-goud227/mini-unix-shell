@@ -300,6 +300,32 @@ int jobs_have_active(void)
     return 0;
 }
 
+int jobs_wait_all(void)
+{
+    jobs_reap_pending();
+    for (;;) {
+        int running = 0;
+        int stopped = 0;
+        for (size_t i = 0; i < MSH_MAX_JOBS; i++) {
+            if (job_table[i] == NULL) continue;
+            JobState state = jobs_get_state(job_table[i]);
+            running |= state == JOB_RUNNING;
+            stopped |= state == JOB_STOPPED;
+        }
+        if (!running) return stopped ? 1 : 0;
+
+        int status;
+        struct rusage usage = {0};
+        pid_t pid = wait4(-1, &status, WUNTRACED | WCONTINUED, &usage);
+        if (pid > 0) {
+            jobs_record_usage(pid, status, &usage);
+        } else if (pid == -1 && errno != EINTR) {
+            perror("msh: wait");
+            return 1;
+        }
+    }
+}
+
 static void signal_active_jobs(int signal_number)
 {
     for (size_t i = 0; i < MSH_MAX_JOBS; i++) {

@@ -186,7 +186,8 @@ int execute_pipeline(const Pipeline *pipeline,
         }
 
         if (is_builtin(command)
-            && strcmp(command->argv[0], "pwd") != 0) {
+            && strcmp(command->argv[0], "pwd") != 0
+            && strcmp(command->argv[0], ":") != 0) {
             fprintf(stderr, "msh: %s is not supported in a pipeline "
                             "or background job\n",
                     command->argv[0]);

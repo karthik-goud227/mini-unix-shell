@@ -44,6 +44,21 @@ size_t parameters_count(void)
     return argument_count;
 }
 
+int parameters_shift(size_t count)
+{
+    if (count > argument_count) {
+        errno = EINVAL;
+        return -1;
+    }
+    if (count == 0) return 0;
+    for (size_t i = 1; i <= count; i++) free(values[i]);
+    memmove(values + 1, values + count + 1,
+            (argument_count - count) * sizeof(*values));
+    argument_count -= count;
+    values[argument_count + 1] = NULL;
+    return 0;
+}
+
 const char *parameters_get(size_t index)
 {
     if (values == NULL || index > argument_count) {
