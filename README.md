@@ -60,6 +60,13 @@ Make, Python 3, and WSL Ubuntu on Windows. The app itself needs no extra
 Python or Node packages and works offline after the repository is obtained.
 See [webapp/README.md](webapp/README.md) for setup and behavior details.
 
+The browser is an optional demonstration interface. The OS project remains
+the C `msh` executable: it creates and manages processes, pipes, file
+descriptors, process groups, terminal ownership, and signals. The browser
+starts that executable in a Linux pseudo-terminal and forwards input and
+output; it does not implement shell commands. Every shell feature can also
+be demonstrated directly with `./msh` without the browser.
+
 ## Script-file execution
 
 Run commands from a file:

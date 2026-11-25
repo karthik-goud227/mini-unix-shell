@@ -30,6 +30,20 @@
     </section>
 
     <div class="workspace">
+      <main class="terminal-panel" aria-label="Live shell terminal">
+        <div class="terminal-toolbar">
+          <div class="terminal-title"><span class="terminal-glyph">▣</span><div><strong>Live terminal</strong><small id="working-directory">Project directory</small></div></div>
+          <div class="terminal-actions">
+            <button id="send-interrupt" type="button" title="Send Ctrl+C">Ctrl+C</button>
+            <button id="send-suspend" type="button" title="Send Ctrl+Z">Ctrl+Z</button>
+            <button id="clear-terminal" type="button" title="Clear the visible terminal">Clear</button>
+            <button id="restart-shell" type="button" title="Start a new shell after this one exits" hidden>New shell</button>
+          </div>
+        </div>
+        <div class="terminal-stage" id="terminal-stage"><div id="terminal"></div></div>
+        <div class="terminal-footer"><span>Click inside to type</span><span>Local session <span class="footer-separator">/</span> Linux or WSL</span></div>
+      </main>
+
       <aside class="quick-panel" aria-label="Quick examples">
         <div class="panel-heading">
           <h2>Examples</h2>
@@ -44,20 +58,6 @@
         </div>
         <p class="quick-tip">To inspect job control, run <strong>Job control: sleep</strong>, press Ctrl+Z, then select <strong>Show jobs</strong>.</p>
       </aside>
-
-      <main class="terminal-panel" aria-label="Live shell terminal">
-        <div class="terminal-toolbar">
-          <div class="terminal-title"><span class="terminal-glyph">▣</span><div><strong>Live terminal</strong><small id="working-directory">Project directory</small></div></div>
-          <div class="terminal-actions">
-            <button id="send-interrupt" type="button" title="Send Ctrl+C">Ctrl+C</button>
-            <button id="send-suspend" type="button" title="Send Ctrl+Z">Ctrl+Z</button>
-            <button id="clear-terminal" type="button" title="Clear the visible terminal">Clear</button>
-            <button id="restart-shell" type="button" title="Start a new shell after this one exits" hidden>New shell</button>
-          </div>
-        </div>
-        <div class="terminal-stage" id="terminal-stage"><div id="terminal"></div></div>
-        <div class="terminal-footer"><span>Click inside to type</span><span>Local session <span class="footer-separator">/</span> Linux or WSL</span></div>
-      </main>
 
       <section class="script-panel" aria-label="Script editor">
         <div class="script-header"><h2>Script editor</h2><p>Edit the example or load a script file.</p></div>
