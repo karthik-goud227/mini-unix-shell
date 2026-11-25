@@ -149,6 +149,7 @@ test: msh lexer_test parser_test jobs_test expansion_test usage_test usage_colle
 	python3 tests/chain_evaluation_test.py
 	python3 tests/chain_signal_test.py
 	python3 tests/chain_launch_test.py
+	python3 webapp/test_webapp.py
 
 clean:
 	rm -f msh $(OBJ) lexer_test parser_test jobs_test expansion_test usage_test usage_collection_test statistics_test command_list_test jobs_fork_test chain_wait_test chain_stop_test chain_copy_test variables_test assignment_test assignment_parser_test assignment_exec_test assignment_builtin_test variables_snapshot_test parameters_test

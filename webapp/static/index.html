@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>MiniUnix Shell Lab</title>
+  <link rel="stylesheet" href="/static/vendor/xterm.css">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script src="/static/vendor/xterm.js" defer></script>
+  <script src="/static/vendor/addon-fit.js" defer></script>
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand" aria-label="MiniUnix Shell Lab">
+        <div class="brand-mark" aria-hidden="true">&gt;_</div>
+        <div><strong>MiniUnix</strong><span>Shell Lab</span></div>
+      </div>
+      <div class="top-actions">
+        <div class="live-badge" id="live-badge"><span class="live-dot"></span><span id="live-label">Connecting</span></div>
+        <a href="https://github.com/karthik-goud227/mini-unix-shell" target="_blank" rel="noopener noreferrer" class="code-link">View source <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <section class="intro">
+      <div class="eyebrow">OPERATING SYSTEMS PROJECT <span></span> LIVE WORKSPACE</div>
+      <h1>The UNIX shell, made <em>visible.</em></h1>
+      <p>Try real commands, explore process behavior, and run scripts in the C shell you built.</p>
+    </section>
+
+    <div class="workspace">
+      <aside class="quick-panel" aria-label="Quick examples">
+        <div class="panel-heading">
+          <span class="section-kicker">GET STARTED</span>
+          <h2>Quick runs</h2>
+          <p>Choose an example, then watch it run in the terminal.</p>
+        </div>
+        <div class="examples">
+          <button class="example" data-example="hello" type="button"><span class="example-icon">01</span><span><strong>Hello, shell</strong><small>Run a first command</small></span><span class="arrow">↗</span></button>
+          <button class="example" data-example="pipeline" type="button"><span class="example-icon">02</span><span><strong>Pipeline</strong><small>Connect three processes</small></span><span class="arrow">↗</span></button>
+          <button class="example" data-example="redirect" type="button"><span class="example-icon">03</span><span><strong>Redirection</strong><small>Write and read a file</small></span><span class="arrow">↗</span></button>
+          <button class="example" data-example="job" type="button"><span class="example-icon">04</span><span><strong>Job control</strong><small>Stop with Ctrl+Z</small></span><span class="arrow">↗</span></button>
+          <button class="example" data-example="jobs" type="button"><span class="example-icon">05</span><span><strong>Show jobs</strong><small>Inspect shell state</small></span><span class="arrow">↗</span></button>
+        </div>
+        <div class="quick-tip"><span class="tip-icon">i</span><p><strong>Real OS behavior.</strong> Commands run in <code>msh</code> inside a local pseudo-terminal. Try Ctrl+C and Ctrl+Z.</p></div>
+      </aside>
+
+      <main class="terminal-panel" aria-label="Live shell terminal">
+        <div class="terminal-toolbar">
+          <div class="terminal-title"><span class="terminal-glyph">▣</span><div><strong>Live terminal</strong><small id="working-directory">Project directory</small></div></div>
+          <div class="terminal-actions">
+            <button id="send-interrupt" type="button" title="Send Ctrl+C">Ctrl+C</button>
+            <button id="send-suspend" type="button" title="Send Ctrl+Z">Ctrl+Z</button>
+            <button id="clear-terminal" type="button" title="Clear the visible terminal">Clear</button>
+            <button id="restart-shell" type="button" title="Start a new shell after this one exits" hidden>New shell</button>
+          </div>
+        </div>
+        <div class="terminal-stage" id="terminal-stage"><div id="terminal"></div></div>
+        <div class="terminal-footer"><span>Click inside to type</span><span>Local session <span class="footer-separator">/</span> Linux or WSL</span></div>
+      </main>
+
+      <section class="script-panel" aria-label="Script editor">
+        <div class="script-header"><span class="section-kicker">WRITE AND RUN</span><h2>Script studio</h2><p>Edit the example or load your own <code>.msh</code> file.</p></div>
+        <div class="editor-toolbar"><span class="editor-file"><span class="editor-dot"></span> demo.msh</span><button id="reset-script" type="button">Reset</button></div>
+        <label class="visually-hidden" for="script-editor">Shell script source</label>
+        <textarea id="script-editor" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+        <div class="script-actions"><button id="run-script" class="primary-button" type="button"><span aria-hidden="true">▶</span> Run script</button><label class="upload-button" for="load-script">Load file</label><input id="load-script" type="file" accept=".msh,.sh,.txt,text/plain" hidden></div>
+        <p class="script-note">The editor runs your script in a child <code>msh</code> process. Save your work locally if you want to keep it.</p>
+      </section>
+    </div>
+
+    <div class="bottom-row"><span class="bottom-label">UNDER THE HOOD</span><div class="concepts"><span>fork + exec</span><span>pipes</span><span>redirection</span><span>signals</span><span>job control</span></div><span class="bottom-copy">Powered by the C shell in this repository</span></div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

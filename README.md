@@ -46,6 +46,20 @@ make
 
 Run these commands from the repository directory.
 
+## Local browser application
+
+MiniUnix Shell Lab provides a live browser terminal, quick command examples,
+and a script editor while retaining the C shell as its execution engine.
+The terminal is connected through a Linux pseudo-terminal so Ctrl+C,
+Ctrl+Z, `jobs`, `fg`, and `bg` work as interactive shell features.
+
+On Linux, run `./run-webapp.sh` and open <http://127.0.0.1:8765>. On Windows
+with WSL Ubuntu, double-click `run-webapp.bat`. The launcher builds the C
+shell and opens the browser when the server is ready. Teammates need GCC,
+Make, Python 3, and WSL Ubuntu on Windows. The app itself needs no extra
+Python or Node packages and works offline after the repository is obtained.
+See [webapp/README.md](webapp/README.md) for setup and behavior details.
+
 ## Script-file execution
 
 Run commands from a file:
