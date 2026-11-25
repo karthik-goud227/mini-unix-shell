@@ -44,7 +44,7 @@ The app binds only to the local computer. If port 8765 is occupied, run
 
 - The live terminal is a real `msh` session. Typed commands, quick examples,
   and the control-key buttons all send input to the same session.
-- Script Studio runs text in a separate script-mode `msh` process. Changes
+- The script editor runs text in a separate script-mode `msh` process. Changes
   made inside that script do not modify the interactive parent shell.
 - Reloading the browser keeps the shell session while the server is running.
   The editor draft is saved in that browser's local storage.

@@ -2,7 +2,7 @@
 
 For the visual demo, start MiniUnix Shell Lab with `./run-webapp.sh` on
 Linux or `run-webapp.bat` on Windows with WSL Ubuntu. In the browser, use
-the Pipeline and Redirection examples, run the sample in Script Studio,
+the Pipeline and Redirection examples, run the sample in the script editor,
 then choose Job control, press Ctrl+Z, and choose Show jobs. This shows
 the same C shell through a real terminal session.
 
